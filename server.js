@@ -10,14 +10,14 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 60000,
     pingInterval: 25000,
-    maxHttpBufferSize: 100 * 1024 * 1024
-
+    maxHttpBufferSize: 200 * 1024 * 1024, // INCREASED BUFFER
+    transports: ['websocket']
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 const devices = new Map();
 
@@ -42,11 +42,10 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 BROADCAST SCREEN TO ALL (NOT ROOM - FIX BLACK SCREEN)
+    // 🔥 HIGH QUALITY SCREEN - NO BLUR
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            // BROADCAST TO ALL CLIENTS (NOT JUST ROOM)
             socket.broadcast.emit('screen-update', {
                 deviceId,
                 data: data.data,
@@ -57,7 +56,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 BROADCAST LAYOUT TO ALL
+    // 🔥 LAYOUT BROADCAST
     socket.on('ui-layout', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
@@ -65,7 +64,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 CONTROL TO SPECIFIC DEVICE ROOM
+    // 🔥 CONTROL TO DEVICE
     socket.on('control', (data) => {
         const { deviceId, action, x, y, startX, startY, endX, endY, scrollDistance } = data;
         if (devices.has(deviceId)) {
@@ -88,5 +87,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Server: http://localhost:${PORT}`);
+    console.log(`🚀 Server CLEAR: http://localhost:${PORT}`);
 });
