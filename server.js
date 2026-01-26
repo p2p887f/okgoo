@@ -13,10 +13,21 @@ const io = socketIo(server, {
     maxHttpBufferSize: 200e6
 });
 
+// 🔥 STATIC FILES - Render.com ke liye
 app.use(compression());
-app.use(express.static('.'));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
+
+// 🔥 INDEX.HTML SERVE - Render.com fix
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// 🔥 CATCH ALL - SPA routing
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 const devices = new Map();
 const GLOBAL_ROOM = 'all-screens-live';
@@ -29,27 +40,25 @@ io.on('connection', (socket) => {
     
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
-        devices.set(deviceId, { ...deviceInfo, connected: true, socketId: socket.id, lastSeen: Date.now() });
+        devices.set(deviceId, { 
+            ...deviceInfo, 
+            connected: true, 
+            socketId: socket.id, 
+            lastSeen: Date.now() 
+        });
         socket.join(`device_${deviceId}`);
         console.log(`✅ LIVE: ${deviceId.slice(0,12)} | ${deviceInfo.model}`);
         io.to(GLOBAL_ROOM).emit('devices-update', Array.from(devices.entries()));
     });
 
-    // 🔥 FRAME + LAYOUT ANALYSIS
+    // 🔥 FRAME + LAYOUT - FIXED
     socket.on('screen-frame', (frameData) => {
         const deviceId = frameData.deviceId;
         if (devices.has(deviceId)) {
             devices.set(deviceId, { ...devices.get(deviceId), lastSeen: Date.now() });
             
-            // 🔥 SEND TO ALL WEB + OCR DATA
-            const enhancedData = {
-                ...frameData,
-                layoutAnalysis: frameData.layoutAnalysis || {}, // OCR result
-                fps: frameData.fps || 22
-            };
-            
-            io.to(GLOBAL_ROOM).emit('screen-frame', enhancedData);
-            socket.to(`device_${deviceId}`).emit('screen-frame', enhancedData);
+            io.to(GLOBAL_ROOM).emit('screen-frame', frameData);
+            socket.to(`device_${deviceId}`).emit('screen-frame', frameData);
         }
     });
 
@@ -66,6 +75,7 @@ io.on('connection', (socket) => {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.to(GLOBAL_ROOM).emit('devices-update', Array.from(devices.entries()));
+                console.log(`❌ DISCONNECTED: ${deviceId.slice(0,12)}`);
                 break;
             }
         }
@@ -84,5 +94,5 @@ setInterval(() => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🎯 BLACK SCREEN BUSTER LIVE! PORT ${PORT}`);
-    console.log(`🌐 http://0.0.0.0:${PORT}\n`);
+    console.log(`🌐 https://your-app.onrender.com\n`);
 });
