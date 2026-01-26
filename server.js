@@ -9,7 +9,8 @@ const server = http.createServer(app);
 const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 60000,
-    pingInterval: 25000
+    pingInterval: 25000,
+    maxHttpBufferSize: 100MB
 });
 
 app.use(compression());
@@ -24,7 +25,7 @@ app.get('/devices', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('🔌 New connection:', socket.id);
+    console.log('🔌 Client connected:', socket.id);
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
@@ -40,11 +41,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 SCREEN STREAM (BROADCAST TO ALL CLIENTS)
+    // 🔥 BROADCAST SCREEN TO ALL (NOT ROOM - FIX BLACK SCREEN)
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            // Broadcast to ALL clients (not just device room)
+            // BROADCAST TO ALL CLIENTS (NOT JUST ROOM)
             socket.broadcast.emit('screen-update', {
                 deviceId,
                 data: data.data,
@@ -55,7 +56,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 UI LAYOUT (BROADCAST TO ALL)
+    // 🔥 BROADCAST LAYOUT TO ALL
     socket.on('ui-layout', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
@@ -63,26 +64,17 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 CONTROL COMMANDS (SEND TO DEVICE ROOM)
+    // 🔥 CONTROL TO SPECIFIC DEVICE ROOM
     socket.on('control', (data) => {
         const { deviceId, action, x, y, startX, startY, endX, endY, scrollDistance } = data;
         if (devices.has(deviceId)) {
-            socket.to(deviceId).emit('control', {
-                action,
-                x: parseFloat(x) || 0,
-                y: parseFloat(y) || 0,
-                startX: parseFloat(startX) || 0,
-                startY: parseFloat(startY) || 0,
-                endX: parseFloat(endX) || 0,
-                endY: parseFloat(endY) || 0,
-                scrollDistance: parseFloat(scrollDistance) || 0
-            });
+            socket.to(deviceId).emit('control', data);
             console.log('🎮', action, '→', deviceId);
         }
     });
 
     socket.on('disconnect', () => {
-        for (const [deviceId, info] of devices.entries()) {
+        for (let [deviceId, info] of devices) {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
