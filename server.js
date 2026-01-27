@@ -10,13 +10,13 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 60000,
     pingInterval: 25000,
-    maxHttpBufferSize: 200 * 1024 * 1024
+    maxHttpBufferSize: 300 * 1024 * 1024 // 🔥 Increased for Android 14+
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '200mb' }));
-app.use(express.urlencoded({ limit: '200mb', extended: true }));
+app.use(express.json({ limit: '300mb' }));
+app.use(express.urlencoded({ limit: '300mb', extended: true }));
 
 const devices = new Map();
 
