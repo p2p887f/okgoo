@@ -10,7 +10,7 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 60000,
     pingInterval: 25000,
-    maxHttpBufferSize: 300 * 1024 * 1024 // 🔥 Increased for Android 14+
+    maxHttpBufferSize: 300 * 1024 * 1024
 });
 
 app.use(compression());
@@ -48,6 +48,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // 🔥 FIXED: Layout always broadcasts with screen
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
@@ -57,9 +58,10 @@ io.on('connection', (socket) => {
                 width: data.width,
                 height: data.height,
                 timestamp: data.timestamp,
-                layout: data.layout,
+                layout: data.layout || [], // 🔥 Always send layout
                 fps: data.fps
             });
+            console.log(`📱 Frame + Layout (${data.layout?.length || 0} elements) for ${deviceId}`);
         }
     });
 
