@@ -286,28 +286,38 @@
         }
 
         phoneFrame.addEventListener('click', (e) => {
-            if (!showLayout || !currentDevice) return;
-            
-            const rect = phoneFrame.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            // 🔥 Check layout element click first
-            const clickedElement = layoutElements.find(el => 
-                x >= el.x && x <= el.x + el.w && y >= el.y && y <= el.y + el.h
-            );
-            
-            if (clickedElement) {
-                sendTap(clickedElement.deviceX, clickedElement.deviceY);
-                clickedElement.box.style.background = 'rgba(255,255,0,0.5)';
-                setTimeout(() => {
-                    clickedElement.box.style.background = clickedElement.isPin ? 
-                        'rgba(255,68,68,0.35)' : 'rgba(0,255,136,0.25)';
-                }, 200);
-                console.log('🎯 UPI PIN CLICKED:', clickedElement.element.text || clickedElement.element.contentDescription);
-                return;
-            }
-        });
+    if (!showLayout || !currentDevice) return;
+    
+    const rect = phoneFrame.getBoundingClientRect();
+    const scaleX = deviceWidth / rect.width;
+    const scaleY = deviceHeight / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    
+    // 🔥 Find exact element match
+    const clickedElement = layoutElements.find(el => 
+        x >= el.element.bounds.left &&
+        x <= el.element.bounds.right &&
+        y >= el.element.bounds.top &&
+        y <= el.element.bounds.bottom
+    );
+    
+    if (clickedElement) {
+        const centerX = clickedElement.element.bounds.centerX;
+        const centerY = clickedElement.element.bounds.centerY;
+        sendTap(centerX, centerY);
+        
+        const text = clickedElement.element.text || clickedElement.element.contentDescription;
+        console.log('🎯 ELEMENT TAPPED:', text, `(${centerX},${centerY})`);
+        
+        // 🔥 Visual feedback
+        clickedElement.x -= 5;
+        clickedElement.y -= 5;
+        clickedElement.w += 10;
+        clickedElement.h += 10;
+        setTimeout(() => renderLayoutOverlay(layoutData, rect), 150);
+    }
+});
 
         function sendTap(x, y) {
             if (!currentDevice) return;
