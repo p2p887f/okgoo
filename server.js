@@ -18,12 +18,20 @@ app.use(express.json({ limit: '50mb' }));
 
 const devices = new Map();
 
+// 🔥 AUTO REFRESH DEVICES EVERY 3 SECONDS
+setInterval(() => {
+    io.emit('devices-update', Array.from(devices.entries()));
+}, 3000);
+
 app.get('/devices', (req, res) => {
     res.json(Array.from(devices.entries()));
 });
 
 io.on('connection', (socket) => {
     console.log('🔌 Client connected:', socket.id);
+    
+    // 🔥 SEND DEVICES ON CONNECT
+    socket.emit('devices-update', Array.from(devices.entries()));
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
