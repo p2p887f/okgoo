@@ -102,7 +102,6 @@
             updateDeviceList(devices);
         });
 
-        // 🔥 ULTRA SMOOTH SCREEN RENDERING
         socket.on('screen-update', (data) => {
             if (data.deviceId !== currentDevice) return;
             
@@ -147,7 +146,6 @@
                 `).join('') : '<div style="text-align:center;opacity:0.5">No devices online</div>';
         }
 
-        // 🔥 FIXED: Device select - NO socket.emit needed here
         function selectDevice(deviceId, el) {
             currentDevice = deviceId;
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
@@ -155,7 +153,7 @@
             console.log('✅ Selected device:', deviceId);
         }
 
-        // 🔥 PERFECT TOUCH/MOUSE CONTROLS + SCROLL
+        // 🔥 PERFECT SCALED COORDINATES
         function getScaledCoords(clientX, clientY) {
             const rect = phoneFrame.getBoundingClientRect();
             const scaleX = deviceWidth / rect.width;
@@ -166,113 +164,89 @@
             };
         }
 
-        // Touch/Mouse events
-        ['mousedown', 'touchstart'].forEach(event => {
-            phoneFrame.addEventListener(event, e => {
-                e.preventDefault();
-                dragging = true;
-                scrollMode = false;
-                const coords = getScaledCoords(
-                    e.touches?.[0]?.clientX || e.clientX,
-                    e.touches?.[0]?.clientY || e.clientY
-                );
-                startX = coords.x; startY = coords.y;
-                sendTap(coords.x, coords.y);
-            });
-        });
+        // 🔥 TOUCH/MOUSE EVENTS - FULLY FIXED
+        phoneFrame.addEventListener('mousedown', handleStart);
+        phoneFrame.addEventListener('touchstart', handleStart, { passive: false });
 
-        ['mousemove', 'touchmove'].forEach(event => {
-            phoneFrame.addEventListener(event, e => {
-                if (!dragging || !currentDevice) return;
-                e.preventDefault();
-                
-                const coords = getScaledCoords(
-                    e.touches?.[0]?.clientX || e.clientX,
-                    e.touches?.[0]?.clientY || e.clientY
-                );
-                
-                // Detect scroll gesture (vertical movement > horizontal)
-                const dx = Math.abs(coords.x - startX);
-                const dy = Math.abs(coords.y - startY);
-                if (dy > dx * 1.5 && dy > 50) {
-                    if (!scrollMode) {
-                        scrollMode = true;
-                        sendScroll(startX, startY, coords.x, coords.y);
-                    }
-                } else {
-                    sendSwipe(startX, startY, coords.x, coords.y);
+        phoneFrame.addEventListener('mousemove', handleMove);
+        phoneFrame.addEventListener('touchmove', handleMove, { passive: false });
+
+        phoneFrame.addEventListener('mouseup', handleEnd);
+        phoneFrame.addEventListener('touchend', handleEnd, { passive: false });
+        phoneFrame.addEventListener('touchcancel', handleEnd, { passive: false });
+
+        function handleStart(e) {
+            e.preventDefault();
+            dragging = true;
+            scrollMode = false;
+            
+            const clientX = e.touches?.[0]?.clientX || e.clientX;
+            const clientY = e.touches?.[0]?.clientY || e.clientY;
+            const coords = getScaledCoords(clientX, clientY);
+            startX = coords.x;
+            startY = coords.y;
+            
+            // Initial tap
+            sendControl('tap', coords.x, coords.y);
+        }
+
+        function handleMove(e) {
+            if (!dragging || !currentDevice) return;
+            e.preventDefault();
+            
+            const clientX = e.touches?.[0]?.clientX || e.clientX;
+            const clientY = e.touches?.[0]?.clientY || e.clientY;
+            const coords = getScaledCoords(clientX, clientY);
+            
+            const dx = Math.abs(coords.x - startX);
+            const dy = Math.abs(coords.y - startY);
+            
+            // Scroll detection (vertical > horizontal)
+            if (dy > dx * 1.5 && dy > 30) {
+                if (!scrollMode) {
+                    scrollMode = true;
+                    sendControl('scroll', startX, startY, coords.x, coords.y);
                 }
-            });
-        });
-
-        ['mouseup', 'touchend'].forEach(event => {
-            phoneFrame.addEventListener(event, e => {
-                dragging = false;
-                scrollMode = false;
-            });
-        });
-
-        // 🔥 CONTROL FUNCTIONS - All working now!
-        function sendTap(x, y) {
-            if (!currentDevice) return;
-            console.log('👆 Tap:', x, y);
-            socket.emit('control', { 
-                deviceId: currentDevice, 
-                action: 'tap', 
-                x: parseFloat(x), 
-                y: parseFloat(y) 
-            });
+            } else {
+                sendControl('swipe', startX, startY, coords.x, coords.y);
+            }
         }
 
-        function sendSwipe(sx, sy, ex, ey) {
-            if (!currentDevice) return;
-            console.log('🖐️ Swipe:', sx,sy,'→',ex,ey);
-            socket.emit('control', { 
-                deviceId: currentDevice, 
-                action: 'swipe', 
-                startX: parseFloat(sx), 
-                startY: parseFloat(sy), 
-                endX: parseFloat(ex), 
-                endY: parseFloat(ey) 
-            });
+        function handleEnd(e) {
+            dragging = false;
+            scrollMode = false;
         }
 
-        function sendScroll(sx, sy, ex, ey) {
-            if (!currentDevice) return;
-            console.log('📜 Scroll:', sx,sy,'→',ex,ey);
-            socket.emit('control', { 
-                deviceId: currentDevice, 
-                action: 'scroll', 
-                startX: parseFloat(sx), 
-                startY: parseFloat(sy), 
-                endX: parseFloat(ex), 
-                endY: parseFloat(ey) 
-            });
+        // 🔥 UNIVERSAL CONTROL FUNCTION
+        function sendControl(action, x, y, endX, endY) {
+            if (!currentDevice) {
+                console.log('❌ No device selected');
+                return;
+            }
+            
+            const controlData = {
+                deviceId: currentDevice,
+                action: action
+            };
+            
+            if (x !== undefined) controlData.x = x;
+            if (y !== undefined) controlData.y = y;
+            if (endX !== undefined) controlData.endX = endX;
+            if (endY !== undefined) controlData.endY = endY;
+            if (x !== undefined && y !== undefined) {
+                controlData.startX = x;
+                controlData.startY = y;
+            }
+            
+            console.log('🎮 Sending:', controlData);
+            socket.emit('control', controlData);
         }
 
-        function sendBack() {
-            if (!currentDevice) return;
-            console.log('🔙 Back pressed');
-            socket.emit('control', { deviceId: currentDevice, action: 'back' });
-        }
-
-        function sendHome() {
-            if (!currentDevice) return;
-            console.log('🏠 Home pressed');
-            socket.emit('control', { deviceId: currentDevice, action: 'home' });
-        }
-
-        function sendRecent() {
-            if (!currentDevice) return;
-            console.log('📋 Recent pressed');
-            socket.emit('control', { deviceId: currentDevice, action: 'recent' });
-        }
-
-        function sendPower() {
-            if (!currentDevice) return;
-            console.log('🔒 Power pressed');
-            socket.emit('control', { deviceId: currentDevice, action: 'power' });
-        }
+        // Button controls
+        function sendBack() { sendControl('back'); }
+        function sendHome() { sendControl('home'); }
+        function sendRecent() { sendControl('recent'); }
+        function sendPower() { sendControl('power'); }
 
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
@@ -282,7 +256,6 @@
             }
         }
 
-        // Load initial devices
         setTimeout(() => fetch('/devices').then(r => r.json()).then(updateDeviceList), 1000);
     </script>
 </body>
