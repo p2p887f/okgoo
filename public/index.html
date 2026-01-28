@@ -33,38 +33,37 @@
         #screen { width: 100%; height: 100%; background: #000; border-radius: 30px; }
         #fps-counter { position: fixed; top: 10px; right: 10px; font-size: 12px; color: #00ff88; z-index: 1001; }
         
-        #top-controls, #bottom-controls {
-            position: fixed; z-index: 1001; background: rgba(0,0,0,0.9); 
-            padding: 10px; border-radius: 10px; backdrop-filter: blur(20px);
+        #top-controls, #bottom-controls, #keyboard-panel {
+            position: fixed; z-index: 1001; background: rgba(0,0,0,0.95); 
+            padding: 10px; border-radius: 15px; backdrop-filter: blur(20px); border: 1px solid #333;
         }
         #top-controls { top: 10px; right: 320px; }
         #bottom-controls { bottom: 20px; left: 50%; transform: translateX(-50%); }
-        
-        #keyboard-panel {
-            position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.95); padding: 15px; border-radius: 15px;
-            backdrop-filter: blur(20px); border: 1px solid #333; display: none;
-            z-index: 1002; max-width: 400px; width: 90%;
+        #keyboard-panel { 
+            bottom: 120px; left: 50%; transform: translateX(-50%); width: 400px; 
+            display: none; max-height: 200px; overflow-y: auto;
         }
-        #keyboard-input { width: 100%; padding: 12px; background: #1e1e2e; 
-            color: white; border: 1px solid #333; border-radius: 8px; font-size: 16px; }
-        .kb-btn { padding: 8px 16px; margin: 3px; background: #667eea; 
-            color: white; border: none; border-radius: 20px; cursor: pointer; }
         
         button {
-            padding: 12px 24px; margin: 5px; background: linear-gradient(45deg, #667eea, #764ba2); 
-            color: white; border: none; border-radius: 25px; cursor: pointer; 
-            font-size: 14px; font-weight: 600; transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(102,126,234,0.4);
+            padding: 10px 20px; margin: 3px; background: linear-gradient(45deg, #667eea, #764ba2); 
+            color: white; border: none; border-radius: 20px; cursor: pointer; 
+            font-size: 12px; font-weight: 600; transition: all 0.3s;
+            box-shadow: 0 3px 10px rgba(102,126,234,0.4);
         }
-        button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.6); }
+        button:hover { transform: translateY(-1px); box-shadow: 0 5px 15px rgba(102,126,234,0.6); }
         button:active { transform: translateY(0); }
+        
+        #text-input { width: 100%; padding: 12px; margin: 5px 0; background: #2a2a3e; 
+            color: white; border: 1px solid #444; border-radius: 10px; font-size: 16px; }
+        .keyboard-row { display: flex; gap: 5px; margin: 3px 0; }
+        .key { flex: 1; padding: 12px; background: #333; border-radius: 8px; text-align: center; }
+        .key:active { background: #00ff88 !important; color: #000; }
         
         @media (max-width: 768px) {
             #devices { left: 0; top: 0; width: 100%; max-height: 200px; }
-            #phone-frame { right: 0; top: 220px; transform: none; width: 100vw; height: 70vh; border-width: 15px; }
+            #phone-frame { right: 0; top: 220px; transform: none; width: 100vw; height: 60vh; border-width: 15px; }
             #top-controls { right: 10px; }
-            #keyboard-panel { bottom: 80px; left: 10px; right: 10px; transform: none; width: calc(100% - 20px); }
+            #keyboard-panel { width: 95vw; left: 2.5vw; }
         }
     </style>
 </head>
@@ -74,11 +73,12 @@
         <div id="device-list">Loading...</div>
     </div>
     
-    <div id="fps-counter">FPS: 0 | Device: -</div>
+    <div id="fps-counter">FPS: 0 | Device: - | Status: Idle</div>
     
     <div id="top-controls">
         <button onclick="sendHome()">🏠 Home</button>
         <button onclick="sendRecent()">📋 Recent</button>
+        <button onclick="toggleKeyboard()">⌨️ Type</button>
     </div>
 
     <div id="phone-frame">
@@ -87,17 +87,40 @@
 
     <div id="bottom-controls">
         <button onclick="sendBack()">🔙 Back</button>
-        <button onclick="toggleKeyboard()">⌨️ Type</button>
+        <button onclick="toggleFullScreen()">📱 Full</button>
         <button onclick="sendPower()">🔒 Power</button>
     </div>
 
     <!-- 🔥 NEW KEYBOARD PANEL -->
     <div id="keyboard-panel">
-        <div style="margin-bottom: 10px;">
-            <input type="text" id="keyboard-input" placeholder="Type here and press Enter/Send..." maxlength="500">
+        <input type="text" id="text-input" placeholder="Type here... (Enter to send)" 
+               onkeydown="handleKeyInput(event)">
+        <div style="display:flex; gap:5px; margin-top:10px;">
+            <button onclick="sendText(' ')">Space</button>
+            <button onclick="sendText('\n')">↵ Enter</button>
+            <button onclick="clearInput()">⌫ Clear</button>
         </div>
-        <button class="kb-btn" onclick="sendText()">📤 Send Text</button>
-        <button class="kb-btn" onclick="toggleKeyboard()">❌ Close</button>
+        <div class="keyboard-row">
+            <div class="key" onclick="sendText('q')">Q</div><div class="key" onclick="sendText('w')">W</div>
+            <div class="key" onclick="sendText('e')">E</div><div class="key" onclick="sendText('r')">R</div>
+            <div class="key" onclick="sendText('t')">T</div><div class="key" onclick="sendText('y')">Y</div>
+            <div class="key" onclick="sendText('u')">U</div><div class="key" onclick="sendText('i')">I</div>
+            <div class="key" onclick="sendText('o')">O</div><div class="key" onclick="sendText('p')">P</div>
+        </div>
+        <div class="keyboard-row">
+            <div class="key" onclick="sendText('a')">A</div><div class="key" onclick="sendText('s')">S</div>
+            <div class="key" onclick="sendText('d')">D</div><div class="key" onclick="sendText('f')">F</div>
+            <div class="key" onclick="sendText('g')">G</div><div class="key" onclick="sendText('h')">H</div>
+            <div class="key" onclick="sendText('j')">J</div><div class="key" onclick="sendText('k')">K</div>
+            <div class="key" onclick="sendText('l')">L</div>
+        </div>
+        <div class="keyboard-row">
+            <div class="key" onclick="sendText('z')">Z</div><div class="key" onclick="sendText('x')">X</div>
+            <div class="key" onclick="sendText('c')">C</div><div class="key" onclick="sendText('v')">V</div>
+            <div class="key" onclick="sendText('b')">B</div><div class="key" onclick="sendText('n')">N</div>
+            <div class="key" onclick="sendText('m')">M</div>
+            <button onclick="toggleKeyboard()" style="flex:2;">Close</button>
+        </div>
     </div>
 
     <script>
@@ -106,6 +129,7 @@
         let deviceWidth = 1080, deviceHeight = 1920;
         let lastFrameTime = 0, frameCount = 0, dragging = false;
         let startX = 0, startY = 0, scrollMode = false;
+        let keyboardVisible = false;
 
         const canvas = document.getElementById('screen');
         const ctx = canvas.getContext('2d');
@@ -114,10 +138,10 @@
         const deviceCount = document.getElementById('deviceCount');
         const fpsCounter = document.getElementById('fps-counter');
         const keyboardPanel = document.getElementById('keyboard-panel');
-        const keyboardInput = document.getElementById('keyboard-input');
+        const textInput = document.getElementById('text-input');
 
         socket.on('connect', () => {
-            fpsCounter.innerHTML += ' | ✅ Connected';
+            fpsCounter.innerHTML = 'FPS: 0 | Device: - | ✅ Connected';
             console.log('✅ Socket connected');
         });
 
@@ -145,7 +169,7 @@
                     const now = performance.now();
                     if (now - lastFrameTime >= 1000) {
                         const fps = Math.round(frameCount * 1000 / (now - lastFrameTime));
-                        fpsCounter.innerHTML = `FPS: ${fps} | Device: ${currentDevice?.slice(0,8)}`;
+                        fpsCounter.innerHTML = `FPS: ${fps} | Device: ${currentDevice?.slice(0,8)} | Streaming`;
                         frameCount = 0;
                         lastFrameTime = now;
                     }
@@ -164,7 +188,7 @@
                          onclick="selectDevice('${id}', this)">
                         <b>${info.model?.slice(0,20) || id.slice(0,8)}</b><br>
                         <small>${info.brand || 'Android'} ${info.version || ''}</small><br>
-                        <span style="font-size:10px">${info.connected ? '🟢 LIVE' : '🔴 OFF'}</span>
+                        <span style="font-size:10px">${info.connected ? '🟢 LIVE 30FPS' : '🔴 OFFLINE'}</span>
                     </div>
                 `).join('') : '<div style="text-align:center;opacity:0.5">No devices online</div>';
         }
@@ -173,6 +197,7 @@
             currentDevice = deviceId;
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
+            fpsCounter.innerHTML = `FPS: 0 | Device: ${deviceId.slice(0,8)} | Selected`;
             console.log('✅ Selected device:', deviceId);
         }
 
@@ -234,7 +259,6 @@
 
         function sendControl(action, x, y, endX = null, endY = null) {
             if (!currentDevice) return;
-            
             const controlData = { deviceId: currentDevice, action };
             if (x !== undefined && y !== undefined) {
                 controlData.x = parseFloat(x);
@@ -246,32 +270,43 @@
                 controlData.endX = parseFloat(endX);
                 controlData.endY = parseFloat(endY);
             }
-            
             socket.emit('control', controlData);
         }
 
-        // 🔥 KEYBOARD FUNCTIONS
+        // 🔥 TEXT INPUT FUNCTIONS
         function toggleKeyboard() {
-            keyboardPanel.style.display = keyboardPanel.style.display === 'none' ? 'block' : 'none';
-            if (keyboardPanel.style.display === 'block') keyboardInput.focus();
+            keyboardVisible = !keyboardVisible;
+            keyboardPanel.style.display = keyboardVisible ? 'block' : 'none';
+            if (keyboardVisible) textInput.focus();
         }
 
-        function sendText() {
-            const text = keyboardInput.value.trim();
-            if (!text || !currentDevice) return;
-            
+        function sendText(text) {
+            if (!currentDevice || !text) return;
             socket.emit('control', {
                 deviceId: currentDevice,
                 action: 'type',
                 text: text
             });
-            keyboardInput.value = '';
-            console.log('⌨️ Text sent:', text);
+            console.log('⌨️ Typing:', text);
         }
 
-        keyboardInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendText();
-        });
+        function handleKeyInput(e) {
+            if (e.key === 'Enter' && currentDevice) {
+                const text = textInput.value;
+                if (text) {
+                    socket.emit('control', {
+                        deviceId: currentDevice,
+                        action: 'type',
+                        text: text
+                    });
+                    textInput.value = '';
+                }
+            }
+        }
+
+        function clearInput() {
+            textInput.value = '';
+        }
 
         function sendBack() { sendControl('back'); }
         function sendHome() { sendControl('home'); }
