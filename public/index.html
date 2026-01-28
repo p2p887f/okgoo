@@ -33,21 +33,23 @@
         #screen { width: 100%; height: 100%; background: #000; border-radius: 30px; }
         #fps-counter { position: fixed; top: 10px; right: 10px; font-size: 12px; color: #00ff88; z-index: 1001; }
         
-        #top-controls, #bottom-controls {
+        #top-controls, #bottom-controls, #scroll-controls {
             position: fixed; z-index: 1001; background: rgba(0,0,0,0.9); 
             padding: 10px; border-radius: 10px; backdrop-filter: blur(20px);
         }
         #top-controls { top: 10px; right: 320px; }
         #bottom-controls { bottom: 20px; left: 50%; transform: translateX(-50%); }
+        #scroll-controls { bottom: 20px; right: 20px; }
         
         button {
-            padding: 12px 24px; margin: 5px; background: linear-gradient(45deg, #667eea, #764ba2); 
-            color: white; border: none; border-radius: 25px; cursor: pointer; 
-            font-size: 14px; font-weight: 600; transition: all 0.3s;
+            padding: 10px 20px; margin: 4px; background: linear-gradient(45deg, #667eea, #764ba2); 
+            color: white; border: none; border-radius: 20px; cursor: pointer; 
+            font-size: 12px; font-weight: 600; transition: all 0.3s;
             box-shadow: 0 4px 15px rgba(102,126,234,0.4);
         }
         button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.6); }
         button:active { transform: translateY(0); }
+        .scroll-btn { background: linear-gradient(45deg, #00ff88, #00cc6a) !important; }
         
         @media (max-width: 768px) {
             #devices { left: 0; top: 0; width: 100%; max-height: 200px; }
@@ -77,6 +79,14 @@
         <button onclick="sendBack()">🔙 Back</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
         <button onclick="sendPower()">🔒 Power</button>
+    </div>
+
+    <!-- 🔥 NEW SCROLL & SWIPE BUTTONS -->
+    <div id="scroll-controls">
+        <button class="scroll-btn" onclick="sendSwipe('left')">⬅️ Left</button><br>
+        <button class="scroll-btn" onclick="sendSwipe('right')">➡️ Right</button><br>
+        <button class="scroll-btn" onclick="sendScroll('up')">⬆️ Scroll Up</button><br>
+        <button class="scroll-btn" onclick="sendScroll('down')">⬇️ Scroll Down</button>
     </div>
 
     <script>
@@ -163,7 +173,7 @@
             };
         }
 
-        // 🔥 TOUCH/MOUSE EVENTS - PERFECTLY FIXED
+        // 🔥 PERFECT TOUCH/MOUSE EVENTS
         phoneFrame.addEventListener('mousedown', handleStart);
         phoneFrame.addEventListener('touchstart', handleStart, { passive: false });
 
@@ -185,9 +195,7 @@
             startX = coords.x;
             startY = coords.y;
             
-            // 🔥 IMMEDIATE TAP COMMAND
-            sendControl('tap', coords.x, coords.y);
-            console.log('👆 TAP sent:', coords.x, coords.y);
+            console.log('👆 TAP START:', coords.x, coords.y);
         }
 
         function handleMove(e) {
@@ -201,25 +209,34 @@
             const dx = Math.abs(coords.x - startX);
             const dy = Math.abs(coords.y - startY);
             
-            if (dy > dx * 1.5 && dy > 30) {
-                if (!scrollMode) {
-                    scrollMode = true;
-                    sendControl('scroll', startX, startY, coords.x, coords.y);
-                    console.log('📜 SCROLL:', startX, startY, '->', coords.x, coords.y);
-                }
-            } else if (dx > 20 || dy > 20) {
+            if (dy > dx * 1.5 && dy > 50) {
+                scrollMode = true;
+                sendControl('scroll', startX, startY, coords.x, coords.y);
+                console.log('📜 SCROLL:', startX, startY, '->', coords.x, coords.y);
+            } else if (dx > 30 || dy > 30) {
                 sendControl('swipe', startX, startY, coords.x, coords.y);
                 console.log('🖱️ SWIPE:', startX, startY, '->', coords.x, coords.y);
             }
         }
 
         function handleEnd(e) {
+            if (!dragging || !currentDevice) return;
+            
+            const clientX = e.changedTouches?.[0]?.clientX || e.clientX;
+            const clientY = e.changedTouches?.[0]?.clientY || e.clientY;
+            const coords = getScaledCoords(clientX, clientY);
+            
+            if (!scrollMode) {
+                sendControl('tap', coords.x, coords.y);
+                console.log('👆 TAP END:', coords.x, coords.y);
+            }
+            
             dragging = false;
             scrollMode = false;
         }
 
-        // 🔥 UNIVERSAL CONTROL FUNCTION - PERFECT
-        function sendControl(action, x, y, endX, endY) {
+        // 🔥 FIXED UNIVERSAL CONTROL - SAB COORDINATES PROPERLY JAYENGE
+        function sendControl(action, x1, y1, x2, y2) {
             if (!currentDevice) {
                 console.log('❌ No device selected');
                 return;
@@ -230,19 +247,20 @@
                 action: action
             };
             
-            // 🔥 PROPER PARAMETER HANDLING
-            if (x !== undefined && y !== undefined) {
-                controlData.x = x;
-                controlData.y = y;
-                controlData.startX = x;
-                controlData.startY = y;
+            // 🔥 TAP - single coordinates
+            if (action === 'tap' && x1 !== undefined && y1 !== undefined) {
+                controlData.x = parseFloat(x1);
+                controlData.y = parseFloat(y1);
             }
-            if (endX !== undefined && endY !== undefined) {
-                controlData.endX = endX;
-                controlData.endY = endY;
+            // 🔥 SWIPE/SCROLL - start + end coordinates
+            else if ((action === 'swipe' || action === 'scroll') && x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
+                controlData.startX = parseFloat(x1);
+                controlData.startY = parseFloat(y1);
+                controlData.endX = parseFloat(x2);
+                controlData.endY = parseFloat(y2);
             }
             
-            console.log('🎮 SENDING CONTROL:', JSON.stringify(controlData));
+            console.log('🎮 SENDING:', JSON.stringify(controlData, null, 2));
             socket.emit('control', controlData);
         }
 
@@ -251,6 +269,38 @@
         function sendHome() { sendControl('home'); console.log('🏠 HOME'); }
         function sendRecent() { sendControl('recent'); console.log('📋 RECENT'); }
         function sendPower() { sendControl('power'); console.log('🔒 POWER'); }
+
+        // 🔥 NEW SCROLL & SWIPE BUTTONS
+        function sendScroll(direction) {
+            const centerX = deviceWidth / 2;
+            const centerY = deviceHeight / 2;
+            let startX = centerX, startY = centerY, endX = centerX, endY = centerY;
+            
+            if (direction === 'up') {
+                startY = deviceHeight * 0.8;
+                endY = deviceHeight * 0.2;
+            } else if (direction === 'down') {
+                startY = deviceHeight * 0.2;
+                endY = deviceHeight * 0.8;
+            }
+            
+            sendControl('scroll', startX, startY, endX, endY);
+        }
+
+        function sendSwipe(direction) {
+            const centerY = deviceHeight / 2;
+            let startX = 0, endX = 0, startY = centerY, endY = centerY;
+            
+            if (direction === 'left') {
+                startX = deviceWidth * 0.8;
+                endX = deviceWidth * 0.2;
+            } else if (direction === 'right') {
+                startX = deviceWidth * 0.2;
+                endX = deviceWidth * 0.8;
+            }
+            
+            sendControl('swipe', startX, startY, endX, endY);
+        }
 
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
