@@ -19,6 +19,7 @@ app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const devices = new Map();
+const deviceSockets = new Map(); // 🔥 NEW: Track device sockets
 
 app.post('/register', (req, res) => {
     const { deviceId, model, brand, version, status } = req.body;
@@ -35,7 +36,7 @@ app.get('/devices', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('🔌 Web client connected:', socket.id);
+    console.log('🔌 Client connected:', socket.id);
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
@@ -45,36 +46,38 @@ io.on('connection', (socket) => {
                 connected: true, 
                 socketId: socket.id 
             });
-            socket.join(deviceId); // ✅ Device socket joins its own room
+            deviceSockets.set(deviceId, socket.id); // 🔥 Track socket
+            socket.join(deviceId); // 🔥 Device joins its own room
             io.emit('devices-update', Array.from(devices.entries()));
-            console.log("📱 Device registered:", deviceId);
+            console.log("📱 Device registered:", deviceId, "Socket:", socket.id);
         }
     });
 
-    // 🔥 FIXED: Screen streaming - Broadcast to ALL clients in device room
+    // 🔥 FIXED: Screen streaming - Broadcast to ALL clients watching this device
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
+        console.log('📺 Frame received from:', deviceId, 'Size:', Math.round(data.data.length/1024)+'KB');
+        
         if (devices.has(deviceId)) {
-            // ✅ Broadcast to ALL clients watching this device (including newly selected)
-            socket.to(deviceId).emit('screen-update', {
+            // 🔥 Broadcast to ALL clients (NOT just device room)
+            socket.broadcast.emit('screen-update', {
                 deviceId,
                 data: data.data,
                 width: data.width,
                 height: data.height,
                 timestamp: data.timestamp
             });
-            // Debug log
-            if (Math.random() < 0.033) {
-                console.log('📺 Frame relayed to', deviceId, 'Size:', (data.data.length/1024).toFixed(1)+'KB');
-            }
+            console.log('✅ Frame broadcasted to web clients');
         }
     });
 
-    // 🔥 FIXED: Control commands - Send to specific device room
+    // 🔥 Control commands - Send to SPECIFIC device socket/room
     socket.on('control', (data) => {
         const { deviceId, action, x, y, startX, startY, endX, endY } = data;
+        console.log('🎮 Control to', deviceId, ':', action);
+        
         if (devices.has(deviceId)) {
-            // ✅ Send to specific device room
+            // Send to device's specific socket/room
             io.to(deviceId).emit('control', {
                 action, 
                 x: parseFloat(x)||0, 
@@ -84,20 +87,16 @@ io.on('connection', (socket) => {
                 endX: parseFloat(endX)||0, 
                 endY: parseFloat(endY)||0
             });
-            console.log('🎮 Control:', action, '→', deviceId);
         }
     });
 
-    // 🔥 NEW: Web client watching specific device
-    socket.on('watch-device', (deviceId) => {
-        console.log('👁️ Web client watching:', deviceId);
-        socket.join(deviceId); // ✅ Web client joins device room
-    });
-
     socket.on('disconnect', () => {
+        console.log('🔌 Client disconnected:', socket.id);
+        // Update device status
         for (const [deviceId, info] of devices.entries()) {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
+                deviceSockets.delete(deviceId);
                 io.emit('devices-update', Array.from(devices.entries()));
                 console.log('📱 Device disconnected:', deviceId);
                 break;
