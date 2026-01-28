@@ -153,7 +153,6 @@
             console.log('✅ Selected device:', deviceId);
         }
 
-        // 🔥 PERFECT SCALED COORDINATES
         function getScaledCoords(clientX, clientY) {
             const rect = phoneFrame.getBoundingClientRect();
             const scaleX = deviceWidth / rect.width;
@@ -164,7 +163,7 @@
             };
         }
 
-        // 🔥 TOUCH/MOUSE EVENTS - FULLY FIXED
+        // 🔥 TOUCH/MOUSE EVENTS - PERFECTLY FIXED
         phoneFrame.addEventListener('mousedown', handleStart);
         phoneFrame.addEventListener('touchstart', handleStart, { passive: false });
 
@@ -186,8 +185,9 @@
             startX = coords.x;
             startY = coords.y;
             
-            // Initial tap
+            // 🔥 IMMEDIATE TAP COMMAND
             sendControl('tap', coords.x, coords.y);
+            console.log('👆 TAP sent:', coords.x, coords.y);
         }
 
         function handleMove(e) {
@@ -201,14 +201,15 @@
             const dx = Math.abs(coords.x - startX);
             const dy = Math.abs(coords.y - startY);
             
-            // Scroll detection (vertical > horizontal)
             if (dy > dx * 1.5 && dy > 30) {
                 if (!scrollMode) {
                     scrollMode = true;
                     sendControl('scroll', startX, startY, coords.x, coords.y);
+                    console.log('📜 SCROLL:', startX, startY, '->', coords.x, coords.y);
                 }
-            } else {
+            } else if (dx > 20 || dy > 20) {
                 sendControl('swipe', startX, startY, coords.x, coords.y);
+                console.log('🖱️ SWIPE:', startX, startY, '->', coords.x, coords.y);
             }
         }
 
@@ -217,7 +218,7 @@
             scrollMode = false;
         }
 
-        // 🔥 UNIVERSAL CONTROL FUNCTION
+        // 🔥 UNIVERSAL CONTROL FUNCTION - PERFECT
         function sendControl(action, x, y, endX, endY) {
             if (!currentDevice) {
                 console.log('❌ No device selected');
@@ -229,24 +230,27 @@
                 action: action
             };
             
-            if (x !== undefined) controlData.x = x;
-            if (y !== undefined) controlData.y = y;
-            if (endX !== undefined) controlData.endX = endX;
-            if (endY !== undefined) controlData.endY = endY;
+            // 🔥 PROPER PARAMETER HANDLING
             if (x !== undefined && y !== undefined) {
+                controlData.x = x;
+                controlData.y = y;
                 controlData.startX = x;
                 controlData.startY = y;
             }
+            if (endX !== undefined && endY !== undefined) {
+                controlData.endX = endX;
+                controlData.endY = endY;
+            }
             
-            console.log('🎮 Sending:', controlData);
+            console.log('🎮 SENDING CONTROL:', JSON.stringify(controlData));
             socket.emit('control', controlData);
         }
 
-        // Button controls
-        function sendBack() { sendControl('back'); }
-        function sendHome() { sendControl('home'); }
-        function sendRecent() { sendControl('recent'); }
-        function sendPower() { sendControl('power'); }
+        // 🔥 BUTTON CONTROLS
+        function sendBack() { sendControl('back'); console.log('🔙 BACK'); }
+        function sendHome() { sendControl('home'); console.log('🏠 HOME'); }
+        function sendRecent() { sendControl('recent'); console.log('📋 RECENT'); }
+        function sendPower() { sendControl('power'); console.log('🔒 POWER'); }
 
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
