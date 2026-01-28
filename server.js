@@ -68,43 +68,57 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 FIXED CONTROL - अब PERFECT काम करेगा
+    // 🔥 FIXED CONTROL HANDLER - SAB PERFECT
     socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY } = data;
-        console.log('🎮 CONTROL ->', deviceId, ':', action, {x,y,startX,startY,endX,endY});
+        console.log('🎮 RAW DATA RECEIVED:', JSON.stringify(data, null, 2));
         
-        if (devices.has(deviceId)) {
-            const targetSocketId = deviceSockets.get(deviceId);
-            if (targetSocketId) {
-                // ✅ Method 1: Send to specific socket
-                io.to(targetSocketId).emit('control', {
-                    action, 
-                    x: parseFloat(x) || 0, 
-                    y: parseFloat(y) || 0,
-                    startX: parseFloat(startX) || 0, 
-                    startY: parseFloat(startY) || 0,
-                    endX: parseFloat(endX) || 0, 
-                    endY: parseFloat(endY) || 0
-                });
-                
-                // ✅ Method 2: Also send to room (backup)
-                io.to(deviceId).emit('control', {
-                    action, 
-                    x: parseFloat(x) || 0, 
-                    y: parseFloat(y) || 0,
-                    startX: parseFloat(startX) || 0, 
-                    startY: parseFloat(startY) || 0,
-                    endX: parseFloat(endX) || 0, 
-                    endY: parseFloat(endY) || 0
-                });
-                
-                console.log('✅ Control sent to:', deviceId, 'Socket:', targetSocketId);
-            } else {
-                console.log('⚠️ Device socket not found:', deviceId);
-            }
-        } else {
-            console.log('❌ Device not found:', deviceId);
+        const { deviceId, action, x, y, startX, startY, endX, endY } = data;
+        
+        if (!deviceId) {
+            console.log('❌ No deviceId');
+            return;
         }
+
+        if (!devices.has(deviceId)) {
+            console.log('❌ Device not found:', deviceId);
+            return;
+        }
+
+        const targetSocketId = deviceSockets.get(deviceId);
+        if (!targetSocketId) {
+            console.log('❌ Device socket not found:', deviceId);
+            return;
+        }
+
+        // 🔥 BUILD CLEAN CONTROL OBJECT
+        const controlData = {
+            action: action || 'unknown',
+            deviceId: deviceId
+        };
+
+        // 🔥 EXTRACT COORDINATES PROPERLY
+        if (x !== undefined && y !== undefined) {
+            controlData.x = parseFloat(x) || 0;
+            controlData.y = parseFloat(y) || 0;
+        }
+        
+        if (startX !== undefined && startY !== undefined) {
+            controlData.startX = parseFloat(startX) || 0;
+            controlData.startY = parseFloat(startY) || 0;
+        }
+        
+        if (endX !== undefined && endY !== undefined) {
+            controlData.endX = parseFloat(endX) || 0;
+            controlData.endY = parseFloat(endY) || 0;
+        }
+
+        console.log('🎮 CLEAN CONTROL SENT:', JSON.stringify(controlData, null, 2));
+        
+        // 🔥 SEND TO DEVICE SOCKET
+        io.to(targetSocketId).emit('control', controlData);
+        io.to(deviceId).emit('control', controlData); // Backup
+        
+        console.log('✅ Control sent to:', deviceId, 'Socket:', targetSocketId);
     });
 
     socket.on('disconnect', () => {
