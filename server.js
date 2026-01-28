@@ -10,7 +10,8 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 10000,
     pingInterval: 5000,
-    maxHttpBufferSize: 100MB
+    maxHttpBufferSize: 100 * 1024 * 1024
+
 });
 
 app.use(compression());
