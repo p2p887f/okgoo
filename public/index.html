@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -81,7 +80,7 @@
     </div>
 
     <script>
-        const socket = io({ transports: ['websocket'] }); // ✅ Force WebSocket
+        const socket = io({ transports: ['websocket'] });
         let currentDevice = null;
         let deviceWidth = 1080, deviceHeight = 1920;
         let lastFrameTime = 0, frameCount = 0, dragging = false;
@@ -148,12 +147,12 @@
                 `).join('') : '<div style="text-align:center;opacity:0.5">No devices online</div>';
         }
 
+        // 🔥 FIXED: Device select - NO socket.emit needed here
         function selectDevice(deviceId, el) {
             currentDevice = deviceId;
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
-            socket.emit('control', { deviceId });
-            console.log('Selected:', deviceId);
+            console.log('✅ Selected device:', deviceId);
         }
 
         // 🔥 PERFECT TOUCH/MOUSE CONTROLS + SCROLL
@@ -213,45 +212,65 @@
             });
         });
 
-        // Control functions
+        // 🔥 CONTROL FUNCTIONS - All working now!
         function sendTap(x, y) {
             if (!currentDevice) return;
-            socket.emit('control', { deviceId: currentDevice, action: 'tap', x, y });
+            console.log('👆 Tap:', x, y);
+            socket.emit('control', { 
+                deviceId: currentDevice, 
+                action: 'tap', 
+                x: parseFloat(x), 
+                y: parseFloat(y) 
+            });
         }
 
         function sendSwipe(sx, sy, ex, ey) {
             if (!currentDevice) return;
+            console.log('🖐️ Swipe:', sx,sy,'→',ex,ey);
             socket.emit('control', { 
-                deviceId: currentDevice, action: 'swipe', 
-                startX: sx, startY: sy, endX: ex, endY: ey 
+                deviceId: currentDevice, 
+                action: 'swipe', 
+                startX: parseFloat(sx), 
+                startY: parseFloat(sy), 
+                endX: parseFloat(ex), 
+                endY: parseFloat(ey) 
             });
         }
 
         function sendScroll(sx, sy, ex, ey) {
             if (!currentDevice) return;
+            console.log('📜 Scroll:', sx,sy,'→',ex,ey);
             socket.emit('control', { 
-                deviceId: currentDevice, action: 'scroll', 
-                startX: sx, startY: sy, endX: ex, endY: ey 
+                deviceId: currentDevice, 
+                action: 'scroll', 
+                startX: parseFloat(sx), 
+                startY: parseFloat(sy), 
+                endX: parseFloat(ex), 
+                endY: parseFloat(ey) 
             });
         }
 
         function sendBack() {
             if (!currentDevice) return;
+            console.log('🔙 Back pressed');
             socket.emit('control', { deviceId: currentDevice, action: 'back' });
         }
 
         function sendHome() {
             if (!currentDevice) return;
+            console.log('🏠 Home pressed');
             socket.emit('control', { deviceId: currentDevice, action: 'home' });
         }
 
         function sendRecent() {
             if (!currentDevice) return;
+            console.log('📋 Recent pressed');
             socket.emit('control', { deviceId: currentDevice, action: 'recent' });
         }
 
         function sendPower() {
             if (!currentDevice) return;
+            console.log('🔒 Power pressed');
             socket.emit('control', { deviceId: currentDevice, action: 'power' });
         }
 
