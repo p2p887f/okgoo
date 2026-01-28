@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -41,6 +40,21 @@
         #top-controls { top: 10px; right: 320px; }
         #bottom-controls { bottom: 20px; left: 50%; transform: translateX(-50%); }
         
+        #keyboard-panel {
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.95); padding: 15px; border-radius: 15px;
+            backdrop-filter: blur(20px); border: 1px solid #333; display: none;
+            max-width: 400px; width: 90vw;
+        }
+        #keyboard-input {
+            width: 100%; padding: 12px; background: #1e1e2e; color: white;
+            border: 1px solid #333; border-radius: 8px; font-size: 16px;
+        }
+        #keyboard-send { 
+            width: 100%; margin-top: 10px; background: linear-gradient(45deg, #00ff88, #00cc6a);
+            color: #000; font-weight: 600;
+        }
+        
         button {
             padding: 12px 24px; margin: 5px; background: linear-gradient(45deg, #667eea, #764ba2); 
             color: white; border: none; border-radius: 25px; cursor: pointer; 
@@ -68,6 +82,7 @@
     <div id="top-controls">
         <button onclick="sendHome()">🏠 Home</button>
         <button onclick="sendRecent()">📋 Recent</button>
+        <button onclick="toggleKeyboard()">⌨️ Type</button>
     </div>
 
     <div id="phone-frame">
@@ -78,6 +93,12 @@
         <button onclick="sendBack()">🔙 Back</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
         <button onclick="sendPower()">🔒 Power</button>
+    </div>
+
+    <!-- 🔥 NEW TYPING PANEL -->
+    <div id="keyboard-panel">
+        <input type="text" id="keyboard-input" placeholder="Type here and press Enter/Send..." maxlength="500">
+        <button id="keyboard-send" onclick="sendText()">📤 Send Text</button>
     </div>
 
     <script>
@@ -93,6 +114,8 @@
         const deviceList = document.getElementById('device-list');
         const deviceCount = document.getElementById('deviceCount');
         const fpsCounter = document.getElementById('fps-counter');
+        const keyboardPanel = document.getElementById('keyboard-panel');
+        const keyboardInput = document.getElementById('keyboard-input');
 
         socket.on('connect', () => {
             fpsCounter.innerHTML += ' | ✅ Connected';
@@ -164,13 +187,10 @@
             };
         }
 
-        // 🔥 FIXED TOUCH/MOUSE EVENTS
         phoneFrame.addEventListener('mousedown', handleStart);
         phoneFrame.addEventListener('touchstart', handleStart, { passive: false });
-
         phoneFrame.addEventListener('mousemove', handleMove);
         phoneFrame.addEventListener('touchmove', handleMove, { passive: false });
-
         phoneFrame.addEventListener('mouseup', handleEnd);
         phoneFrame.addEventListener('touchend', handleEnd, { passive: false });
         phoneFrame.addEventListener('touchcancel', handleEnd, { passive: false });
@@ -218,7 +238,6 @@
             scrollMode = false;
         }
 
-        // 🔥 PERFECTLY FIXED sendControl FUNCTION
         function sendControl(action, x, y, endX = null, endY = null) {
             if (!currentDevice) {
                 console.log('❌ No device selected');
@@ -230,7 +249,6 @@
                 action: action
             };
             
-            // 🔥 PROPER COORDINATE HANDLING
             if (x !== undefined && y !== undefined) {
                 controlData.x = parseFloat(x);
                 controlData.y = parseFloat(y);
@@ -243,27 +261,37 @@
                 controlData.endY = parseFloat(endY);
             }
             
-            console.log('🎮 FINAL CONTROL DATA:', JSON.stringify(controlData));
+            console.log('🎮 CONTROL:', JSON.stringify(controlData));
             socket.emit('control', controlData);
         }
 
-        // 🔥 BUTTON CONTROLS - FIXED
-        function sendBack() { 
-            sendControl('back'); 
-            console.log('🔙 BACK sent'); 
+        // 🔥 NEW TYPING FUNCTIONS
+        function toggleKeyboard() {
+            keyboardPanel.style.display = keyboardPanel.style.display === 'none' ? 'block' : 'none';
+            if (keyboardPanel.style.display === 'block') keyboardInput.focus();
         }
-        function sendHome() { 
-            sendControl('home'); 
-            console.log('🏠 HOME sent'); 
+
+        function sendText() {
+            const text = keyboardInput.value.trim();
+            if (!text || !currentDevice) return;
+            
+            socket.emit('control', {
+                deviceId: currentDevice,
+                action: 'type',
+                text: text
+            });
+            console.log('⌨️ TYPING:', text);
+            keyboardInput.value = '';
         }
-        function sendRecent() { 
-            sendControl('recent'); 
-            console.log('📋 RECENT sent'); 
-        }
-        function sendPower() { 
-            sendControl('power'); 
-            console.log('🔒 POWER sent'); 
-        }
+
+        keyboardInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendText();
+        });
+
+        function sendBack() { sendControl('back'); }
+        function sendHome() { sendControl('home'); }
+        function sendRecent() { sendControl('recent'); }
+        function sendPower() { sendControl('power'); }
 
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
