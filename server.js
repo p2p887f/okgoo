@@ -28,6 +28,16 @@ app.post('/register', (req, res) => {
     res.json({ success: true });
 });
 
+app.delete('/unregister/:deviceId', (req, res) => {
+    const deviceId = req.params.deviceId;
+    if (devices.has(deviceId)) {
+        devices.delete(deviceId);
+        console.log("✅ Device unregistered:", deviceId);
+        io.emit('devices-update', Array.from(devices.entries()));
+    }
+    res.json({ success: true });
+});
+
 app.get('/devices', (req, res) => {
     res.json(Array.from(devices.entries()));
 });
@@ -49,7 +59,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 ULTRA-SMOOTH SCREEN CASTING
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
@@ -57,9 +66,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔥 ENHANCED CONTROLS (Tap, Swipe, Scroll, Type)
+    // ✅ ALL CONTROLS: tap, swipe, scroll, slide, type
     socket.on('control', (data) => {
-        const { deviceId, action, x, y, startX, startY, endX, endY, text, direction } = data;
+        const { deviceId, action, x, y, startX, startY, endX, endY, text } = data;
         if (devices.has(deviceId)) {
             socket.to(deviceId).emit('control', {
                 action, 
@@ -69,10 +78,9 @@ io.on('connection', (socket) => {
                 startY: parseFloat(startY) || 0,
                 endX: parseFloat(endX) || 0, 
                 endY: parseFloat(endY) || 0,
-                text: text || '',
-                direction: direction || ''
+                text: text || ''
             });
-            console.log('🎮 Control:', action, '→', deviceId);
+            console.log('🎮 Control:', action, 'to', deviceId);
         }
     });
 
@@ -81,6 +89,7 @@ io.on('connection', (socket) => {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
+                console.log('📱 Device disconnected:', deviceId);
                 break;
             }
         }
