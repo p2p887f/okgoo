@@ -14,7 +14,7 @@
         #devices {
             position: fixed; top: 10px; left: 10px; 
             background: rgba(0,0,0,0.9); padding: 15px; 
-            max-height: 80vh; overflow-y: auto; width: 280px; 
+            max-height: 85vh; overflow-y: auto; width: 300px; 
             border-radius: 10px; backdrop-filter: blur(10px);
         }
         .device { padding: 12px; margin: 8px 0; background: #333; cursor: pointer; 
@@ -22,6 +22,7 @@
         .device:hover { background: #555; transform: translateX(5px); }
         .active { background: #00ff88 !important; color: #000; }
         .disconnected { opacity: 0.5; }
+        .streaming { border-left: 4px solid #00ff88; }
 
         #phone-frame {
             width: 360px; height: 760px; margin: 20px auto; 
@@ -49,6 +50,9 @@
         }
         button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,123,255,0.4); }
         button:active { transform: translateY(0); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .control-btn { background: linear-gradient(45deg, #28a745, #20c997); }
+        .stop-btn { background: linear-gradient(45deg, #dc3545, #c82333); }
         
         #type-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -82,9 +86,10 @@
     </div>
 
     <div id="control-panel">
-        <button onclick="toggleTypeOverlay()">⌨️ Type</button>
-        <button onclick="sendBack()">🔙 Back</button>
-        <button onclick="sendHome()">🏠 Home</button>
+        <button class="control-btn" onclick="toggleStreaming()">📡 Start Stream</button>
+        <button class="control-btn" onclick="toggleTypeOverlay()">⌨️ Type</button>
+        <button class="control-btn" onclick="sendBack()">🔙 Back</button>
+        <button class="control-btn" onclick="sendHome()">🏠 Home</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
     </div>
 
@@ -100,12 +105,13 @@
     <script>
         const socket = io({ transports: ['websocket'] });
         let currentDevice = null;
-        let deviceWidth = 1080, deviceHeight = 1920; // ✅ Default dimensions
+        let deviceWidth = 1080, deviceHeight = 1920; // ✅ Dynamic from server
         let lastFrameTime = 0, frameCount = 0;
         let startX = 0, startY = 0, dragging = false;
+        let frameBuffer = null;
 
         const canvas = document.getElementById('screen');
-        const ctx = canvas.getContext('2d', { alpha: false });
+        const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false });
         const phoneFrame = document.getElementById('phone-frame');
         const deviceList = document.getElementById('device-list');
         const connectionStatus = document.getElementById('connectionStatus');
@@ -115,9 +121,8 @@
         const typeOverlay = document.getElementById('type-overlay');
         const typeInput = document.getElementById('type-input');
 
-        // ✅ PERFECT Canvas setup - FIXED BLACK SCREEN
-        canvas.width = 360; 
-        canvas.height = 760;
+        // ✅ FIXED Canvas setup
+        canvas.width = 360; canvas.height = 760;
         ctx.imageSmoothingEnabled = false;
 
         socket.on('connect', () => {
@@ -129,11 +134,11 @@
             updateDeviceList(devices);
         });
 
-        // ✅ FIXED: Proper screen update with device dimensions
+        // ✅ FIXED: Proper screen update with dynamic sizing
         socket.on('screen-update', (data) => {
             if (data.deviceId !== currentDevice) return;
             
-            // ✅ Update device dimensions from server data
+            // ✅ Update device dimensions from server
             if (data.width && data.height) {
                 deviceWidth = data.width;
                 deviceHeight = data.height;
@@ -141,10 +146,18 @@
             
             const img = new Image();
             img.onload = () => {
-                // ✅ Scale properly to canvas size
-                ctx.imageSmoothingEnabled = false;
+                // ✅ Dynamic frame buffer matching canvas size
+                if (!frameBuffer || frameBuffer.width !== canvas.width || frameBuffer.height !== canvas.height) {
+                    frameBuffer = new OffscreenCanvas(canvas.width, canvas.height);
+                }
+                
+                const frameCtx = frameBuffer.getContext('2d');
+                frameCtx.imageSmoothingEnabled = false;
+                frameCtx.clearRect(0, 0, canvas.width, canvas.height);
+                frameCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(frameBuffer, 0, 0);
                 
                 frameCount++;
                 const now = performance.now();
@@ -156,7 +169,6 @@
                     lastFrameTime = now;
                 }
             };
-            img.onerror = () => console.log('Image load failed');
             img.src = 'data:image/jpeg;base64,' + data.data;
         });
 
@@ -165,16 +177,18 @@
         function updateDeviceList(devices) {
             deviceList.innerHTML = devices.length ? 
                 devices.map(([id, info]) => `
-                    <div class="device ${!info.connected ? 'disconnected' : ''}" 
+                    <div class="device ${!info.connected ? 'disconnected' : ''} ${info.streaming ? 'streaming' : ''}" 
                          onclick="selectDevice('${id}', this, ${info.width || 1080}, ${info.height || 1920})">
                         <b>${info.model || id.slice(0,8)}</b><br>
-                        <small>${info.brand} ${info.version || ''}</small>
-                        ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
+                        <small>${info.brand || ''} ${info.version || ''}</small>
+                        <div style="margin-top: 5px;">
+                            ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
+                            ${info.streaming ? ' 📡 STREAMING' : ''}
+                        </div>
                     </div>
                 `).join('') : 'No devices';
         }
 
-        // ✅ FIXED: Pass device dimensions when selecting
         function selectDevice(deviceId, el, width = 1080, height = 1920) {
             currentDevice = deviceId;
             deviceWidth = width;
@@ -182,9 +196,10 @@
             selectedDevice.textContent = deviceId.slice(0,8);
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
-            console.log(`📱 Selected: ${deviceId} (${width}x${height})`);
+            console.log(`✅ Selected: ${deviceId} (${width}x${height})`);
         }
 
+        // ✅ FIXED: Perfect coordinate scaling
         function getScaledCoords(clientX, clientY) {
             const rect = phoneFrame.getBoundingClientRect();
             const scaleX = deviceWidth / rect.width;
@@ -234,9 +249,11 @@
         });
 
         function sendControl(action, x=0, y=0, startX=0, startY=0, endX=0, endY=0, text='') {
-            if (!currentDevice) return;
+            if (!currentDevice) return alert('Select a device first!');
             socket.emit('control', { 
-                deviceId: currentDevice, action, x, y, startX, startY, endX, endY, text 
+                deviceId: currentDevice, 
+                action, 
+                x, y, startX, startY, endX, endY, text 
             });
         }
 
@@ -245,6 +262,12 @@
         function sendText(text) { sendControl('type', 0, 0, 0, 0, 0, 0, text); }
         function sendBack() { sendControl('back'); }
         function sendHome() { sendControl('home'); }
+
+        // ✅ NEW: Stream Start/Stop Control
+        function toggleStreaming() {
+            if (!currentDevice) return alert('Select a device first!');
+            socket.emit('toggle-stream', { deviceId: currentDevice });
+        }
         
         function toggleTypeOverlay() {
             typeOverlay.style.display = typeOverlay.style.display === 'flex' ? 'none' : 'flex';
@@ -273,6 +296,7 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') sendBack();
             if (e.key === 't' && e.ctrlKey) toggleTypeOverlay();
+            if (e.key === 's' && e.ctrlKey) toggleStreaming();
         });
     </script>
 </body>
