@@ -31,13 +31,12 @@
         }
         #screen { 
             width: 100%; height: 100%; background: #111; border-radius: 20px;
-            image-rendering: pixelated; image-rendering: -webkit-optimize-contrast;
+            image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;
         }
         #fps-counter { position: fixed; top: 10px; right: 150px; font-size: 12px; color: #00ff88; }
         #status { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
             padding: 10px; border-radius: 5px; font-size: 12px; }
         
-        /* ✅ Control Panel - Type input REMOVED */
         #control-panel {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.9); padding: 15px; border-radius: 15px;
@@ -51,15 +50,18 @@
         button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,123,255,0.4); }
         button:active { transform: translateY(0); }
         
-        /* ✅ Keyboard overlay for typing */
-        #virtual-keyboard {
-            position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.95); padding: 15px; border-radius: 15px;
-            backdrop-filter: blur(10px); display: none; max-width: 400px;
+        #type-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none; z-index: 1000;
+            justify-content: center; align-items: center;
         }
-        #type-input {
-            width: 280px; padding: 12px; margin: 5px; border: none; 
-            border-radius: 20px; background: #333; color: white; font-size: 16px;
+        #type-input-overlay {
+            width: 80%; padding: 20px; background: #333; border-radius: 15px;
+            text-align: center;
+        }
+        #type-input-overlay input {
+            width: 100%; padding: 15px; margin: 10px 0; border: none; 
+            border-radius: 10px; background: #555; color: white; font-size: 18px;
         }
     </style>
 </head>
@@ -79,38 +81,45 @@
         <canvas id="screen"></canvas>
     </div>
 
-    <!-- ✅ Virtual Keyboard (shows on double tap) -->
-    <div id="virtual-keyboard">
-        <input type="text" id="type-input" placeholder="Type here... (Enter to send)" maxlength="100">
-        <br><button onclick="sendText()">✅ Send Text</button>
-        <button onclick="hideKeyboard()">❌ Cancel</button>
-    </div>
-
     <div id="control-panel">
+        <button onclick="toggleTypeOverlay()">⌨️ Type</button>
         <button onclick="sendBack()">🔙 Back</button>
         <button onclick="sendHome()">🏠 Home</button>
-        <button onclick="toggleKeyboard()">⌨️ Type</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
     </div>
 
+    <!-- ✅ NEW: Overlay typing - direct keyboard input -->
+    <div id="type-overlay">
+        <div id="type-input-overlay">
+            <input type="text" id="type-input" placeholder="Type here & press Enter..." maxlength="200">
+            <br>
+            <button onclick="sendTypedText()">✅ Send</button>
+            <button onclick="toggleTypeOverlay()">❌ Cancel</button>
+        </div>
+    </div>
+
     <script>
-        const socket = io();
+        const socket = io({ transports: ['websocket'] }); // ✅ Force WebSocket only
         let currentDevice = null;
         let deviceWidth = 1080, deviceHeight = 1920;
         let lastFrameTime = 0, frameCount = 0;
         let startX = 0, startY = 0, dragging = false;
-        let tapCount = 0, lastTapTime = 0;
+        let frameBuffer = new OffscreenCanvas(400, 800); // ✅ Double buffering
 
         const canvas = document.getElementById('screen');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
         const phoneFrame = document.getElementById('phone-frame');
         const deviceList = document.getElementById('device-list');
         const connectionStatus = document.getElementById('connectionStatus');
         const selectedDevice = document.getElementById('selectedDevice');
         const fpsCounter = document.getElementById('fps-counter');
         const fpsDisplay = document.getElementById('fps');
+        const typeOverlay = document.getElementById('type-overlay');
         const typeInput = document.getElementById('type-input');
-        const virtualKeyboard = document.getElementById('virtual-keyboard');
+
+        // ✅ Ultra smooth canvas setup
+        canvas.width = 400; canvas.height = 800;
+        ctx.imageSmoothingEnabled = false;
 
         socket.on('connect', () => {
             connectionStatus.textContent = '✅ Connected';
@@ -121,38 +130,29 @@
             updateDeviceList(devices);
         });
 
-        // ✅ ULTRA SMOOTH SCREEN RENDERING - Fixed Black Screen
         socket.on('screen-update', (data) => {
             if (data.deviceId !== currentDevice) return;
-            try {
-                deviceWidth = data.width;
-                deviceHeight = data.height;
+            
+            const img = new Image();
+            img.onload = () => {
+                // ✅ Double buffering for ultra smooth
+                const frameCtx = frameBuffer.getContext('2d');
+                frameCtx.imageSmoothingEnabled = false;
+                frameCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
-                const rect = phoneFrame.getBoundingClientRect();
-                canvas.width = rect.width;
-                canvas.height = rect.height;
+                ctx.drawImage(frameBuffer, 0, 0);
                 
-                const img = new Image();
-                img.onload = () => {
-                    ctx.imageSmoothingEnabled = false;
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    
-                    frameCount++;
-                    const now = performance.now();
-                    if (now - lastFrameTime >= 1000) {
-                        const fps = Math.round(frameCount * 1000 / (now - lastFrameTime));
-                        fpsCounter.textContent = `FPS: ${fps}`;
-                        fpsDisplay.textContent = fps;
-                        frameCount = 0;
-                        lastFrameTime = now;
-                    }
-                };
-                img.onerror = () => console.error('Image load failed');
-                img.src = 'data:image/jpeg;base64,' + data.data;
-            } catch (e) {
-                console.error('Screen update error:', e);
-            }
+                frameCount++;
+                const now = performance.now();
+                if (now - lastFrameTime >= 1000) {
+                    const fps = Math.round(frameCount * 1000 / (now - lastFrameTime));
+                    fpsCounter.textContent = `FPS: ${fps}`;
+                    fpsDisplay.textContent = fps;
+                    frameCount = 0;
+                    lastFrameTime = now;
+                }
+            };
+            img.src = 'data:image/jpeg;base64,' + data.data;
         });
 
         fetch('/devices').then(r => r.json()).then(updateDeviceList);
@@ -186,26 +186,7 @@
             };
         }
 
-        // ✅ DOUBLE TAP = Keyboard, SINGLE TAP = Click
-        function handleTap(x, y) {
-            const now = Date.now();
-            if (now - lastTapTime < 300) {
-                tapCount++;
-                if (tapCount === 2) {
-                    toggleKeyboard();
-                    return;
-                }
-            } else {
-                tapCount = 1;
-            }
-            lastTapTime = now;
-            
-            if (tapCount === 1) {
-                sendTap(x, y);
-            }
-        }
-
-        // Touch/Mouse Controls
+        // ✅ Touch/Mouse Controls - ULTRA RESPONSIVE
         ['mousedown', 'touchstart'].forEach(event => {
             phoneFrame.addEventListener(event, e => {
                 e.preventDefault();
@@ -237,7 +218,7 @@
                         e.changedTouches?.[0]?.clientX || e.clientX,
                         e.changedTouches?.[0]?.clientY || e.clientY
                     );
-                    handleTap(coords.x, coords.y);
+                    sendTap(coords.x, coords.y);
                 }
                 dragging = false;
             });
@@ -252,24 +233,25 @@
 
         function sendTap(x, y) { sendControl('tap', x, y); }
         function sendSwipe(sx, sy, ex, ey) { sendControl('swipe', 0, 0, sx, sy, ex, ey); }
-        function sendText() {
-            const text = typeInput.value.trim();
-            if (text) {
-                sendControl('type', 0, 0, 0, 0, 0, 0, text);
-                typeInput.value = '';
-            }
-        }
+        function sendText(text) { sendControl('type', 0, 0, 0, 0, 0, 0, text); }
         function sendBack() { sendControl('back'); }
         function sendHome() { sendControl('home'); }
         
-        function toggleKeyboard() {
-            virtualKeyboard.style.display = virtualKeyboard.style.display === 'block' ? 'none' : 'block';
-            if (virtualKeyboard.style.display === 'block') typeInput.focus();
+        function toggleTypeOverlay() {
+            typeOverlay.style.display = typeOverlay.style.display === 'flex' ? 'none' : 'flex';
+            if (typeOverlay.style.display === 'flex') typeInput.focus();
         }
-        function hideKeyboard() {
-            virtualKeyboard.style.display = 'none';
+
+        function sendTypedText() {
+            const text = typeInput.value.trim();
+            if (text) sendText(text);
             typeInput.value = '';
+            toggleTypeOverlay();
         }
+
+        typeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendTypedText();
+        });
 
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
@@ -281,17 +263,8 @@
 
         // ✅ Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && virtualKeyboard.style.display === 'block') {
-                sendText();
-            }
-            if (e.key === 'Escape') {
-                hideKeyboard();
-                if (currentDevice) sendBack();
-            }
-        });
-
-        typeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendText();
+            if (e.key === 'Escape') sendBack();
+            if (e.key === 't' && e.ctrlKey) toggleTypeOverlay();
         });
     </script>
 </body>
