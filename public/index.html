@@ -37,15 +37,10 @@
         #status { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
             padding: 10px; border-radius: 5px; font-size: 12px; }
         
-        /* ✅ NEW: Control Panel */
         #control-panel {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.9); padding: 15px; border-radius: 15px;
             backdrop-filter: blur(10px); text-align: center;
-        }
-        #type-input {
-            width: 200px; padding: 8px; margin: 5px; border: none; 
-            border-radius: 20px; background: #333; color: white;
         }
         button {
             padding: 10px 20px; margin: 5px; background: linear-gradient(45deg, #007bff, #0056b3); 
@@ -73,9 +68,6 @@
     </div>
 
     <div id="control-panel">
-        <input type="text" id="type-input" placeholder="Type text..." maxlength="100">
-        <button onclick="sendText()">⌨️ Type</button>
-        <br>
         <button onclick="sendBack()">🔙 Back</button>
         <button onclick="sendHome()">🏠 Home</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
@@ -96,7 +88,6 @@
         const selectedDevice = document.getElementById('selectedDevice');
         const fpsCounter = document.getElementById('fps-counter');
         const fpsDisplay = document.getElementById('fps');
-        const typeInput = document.getElementById('type-input');
 
         socket.on('connect', () => {
             connectionStatus.textContent = '✅ Connected';
@@ -169,7 +160,7 @@
             };
         }
 
-        // Touch/Mouse Controls
+        // Touch/Mouse Controls + KEYBOARD TYPING
         ['mousedown', 'touchstart'].forEach(event => {
             phoneFrame.addEventListener(event, e => {
                 e.preventDefault();
@@ -207,6 +198,21 @@
             });
         });
 
+        // ✅ KEYBOARD TYPING - Tap textbox then type from keyboard
+        document.addEventListener('keydown', (e) => {
+            if (!currentDevice) return;
+            
+            if (e.key === 'Enter') {
+                sendControl('enter');
+            } else if (e.key === 'Backspace') {
+                sendControl('backspace');
+            } else if (e.key === 'Escape') {
+                sendBack();
+            } else if (e.key.length === 1) {
+                sendControl('type', 0, 0, 0, 0, 0, 0, e.key);
+            }
+        });
+
         function sendControl(action, x=0, y=0, startX=0, startY=0, endX=0, endY=0, text='') {
             if (!currentDevice) return;
             socket.emit('control', { 
@@ -216,13 +222,6 @@
 
         function sendTap(x, y) { sendControl('tap', x, y); }
         function sendSwipe(sx, sy, ex, ey) { sendControl('swipe', 0, 0, sx, sy, ex, ey); }
-        function sendScrollUp() { sendControl('scroll', 0, 0, 0, 100, 0, 0); }
-        function sendScrollDown() { sendControl('scroll', 0, 0, 0, 0, 0, 100); }
-        function sendText() {
-            const text = typeInput.value.trim();
-            if (text) sendControl('type', 0, 0, 0, 0, 0, 0, text);
-            typeInput.value = '';
-        }
         function sendBack() { sendControl('back'); }
         function sendHome() { sendControl('home'); }
         function toggleFullScreen() {
@@ -232,12 +231,6 @@
                 document.exitFullscreen();
             }
         }
-
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && currentDevice) sendText();
-            if (e.key === 'Escape' && currentDevice) sendBack();
-        });
     </script>
 </body>
 </html>
