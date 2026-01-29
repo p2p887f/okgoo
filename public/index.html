@@ -24,7 +24,7 @@
         .disconnected { opacity: 0.5; }
 
         #phone-frame {
-            width: 400px; height: 800px; margin: 20px auto; 
+            width: 360px; height: 760px; margin: 20px auto; 
             background: #000; border: 25px solid #333; border-radius: 50px; 
             position: relative; cursor: pointer; touch-action: none;
             box-shadow: 0 20px 40px rgba(0,0,0,0.5);
@@ -88,7 +88,6 @@
         <button onclick="toggleFullScreen()">📱 Full</button>
     </div>
 
-    <!-- ✅ NEW: Overlay typing - direct keyboard input -->
     <div id="type-overlay">
         <div id="type-input-overlay">
             <input type="text" id="type-input" placeholder="Type here & press Enter..." maxlength="200">
@@ -99,12 +98,11 @@
     </div>
 
     <script>
-        const socket = io({ transports: ['websocket'] }); // ✅ Force WebSocket only
+        const socket = io({ transports: ['websocket'] });
         let currentDevice = null;
-        let deviceWidth = 1080, deviceHeight = 1920;
+        let deviceWidth = 1080, deviceHeight = 1920; // ✅ Default dimensions
         let lastFrameTime = 0, frameCount = 0;
         let startX = 0, startY = 0, dragging = false;
-        let frameBuffer = new OffscreenCanvas(400, 800); // ✅ Double buffering
 
         const canvas = document.getElementById('screen');
         const ctx = canvas.getContext('2d', { alpha: false });
@@ -117,8 +115,9 @@
         const typeOverlay = document.getElementById('type-overlay');
         const typeInput = document.getElementById('type-input');
 
-        // ✅ Ultra smooth canvas setup
-        canvas.width = 400; canvas.height = 800;
+        // ✅ PERFECT Canvas setup - FIXED BLACK SCREEN
+        canvas.width = 360; 
+        canvas.height = 760;
         ctx.imageSmoothingEnabled = false;
 
         socket.on('connect', () => {
@@ -130,17 +129,22 @@
             updateDeviceList(devices);
         });
 
+        // ✅ FIXED: Proper screen update with device dimensions
         socket.on('screen-update', (data) => {
             if (data.deviceId !== currentDevice) return;
             
+            // ✅ Update device dimensions from server data
+            if (data.width && data.height) {
+                deviceWidth = data.width;
+                deviceHeight = data.height;
+            }
+            
             const img = new Image();
             img.onload = () => {
-                // ✅ Double buffering for ultra smooth
-                const frameCtx = frameBuffer.getContext('2d');
-                frameCtx.imageSmoothingEnabled = false;
-                frameCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                
-                ctx.drawImage(frameBuffer, 0, 0);
+                // ✅ Scale properly to canvas size
+                ctx.imageSmoothingEnabled = false;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
                 frameCount++;
                 const now = performance.now();
@@ -152,6 +156,7 @@
                     lastFrameTime = now;
                 }
             };
+            img.onerror = () => console.log('Image load failed');
             img.src = 'data:image/jpeg;base64,' + data.data;
         });
 
@@ -161,7 +166,7 @@
             deviceList.innerHTML = devices.length ? 
                 devices.map(([id, info]) => `
                     <div class="device ${!info.connected ? 'disconnected' : ''}" 
-                         onclick="selectDevice('${id}', this)">
+                         onclick="selectDevice('${id}', this, ${info.width || 1080}, ${info.height || 1920})">
                         <b>${info.model || id.slice(0,8)}</b><br>
                         <small>${info.brand} ${info.version || ''}</small>
                         ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
@@ -169,11 +174,15 @@
                 `).join('') : 'No devices';
         }
 
-        function selectDevice(deviceId, el) {
+        // ✅ FIXED: Pass device dimensions when selecting
+        function selectDevice(deviceId, el, width = 1080, height = 1920) {
             currentDevice = deviceId;
+            deviceWidth = width;
+            deviceHeight = height;
             selectedDevice.textContent = deviceId.slice(0,8);
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
+            console.log(`📱 Selected: ${deviceId} (${width}x${height})`);
         }
 
         function getScaledCoords(clientX, clientY) {
@@ -186,7 +195,7 @@
             };
         }
 
-        // ✅ Touch/Mouse Controls - ULTRA RESPONSIVE
+        // Touch/Mouse Controls
         ['mousedown', 'touchstart'].forEach(event => {
             phoneFrame.addEventListener(event, e => {
                 e.preventDefault();
@@ -261,7 +270,6 @@
             }
         }
 
-        // ✅ Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') sendBack();
             if (e.key === 't' && e.ctrlKey) toggleTypeOverlay();
