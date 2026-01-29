@@ -1,4 +1,3 @@
-
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -11,7 +10,7 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 10000,
     pingInterval: 5000,
-    transports: ['websocket'] // ✅ Force WebSocket only
+    transports: ['websocket']
 });
 
 app.use(compression());
@@ -61,10 +60,19 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ✅ FIXED: Proper screen frame handling with device dimensions
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            socket.to(deviceId).emit('screen-update', data);
+            // ✅ Forward with proper device dimensions
+            socket.to(deviceId).emit('screen-update', {
+                deviceId: deviceId,
+                data: data.data,
+                width: data.width || 1080,
+                height: data.height || 1920,
+                timestamp: data.timestamp,
+                size: data.size
+            });
         }
     });
 
