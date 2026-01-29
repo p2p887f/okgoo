@@ -7,73 +7,89 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-            font-family: Arial, sans-serif; 
-            background: linear-gradient(135deg, #1a1a1a, #2d2d2d); 
+            font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; 
+            background: linear-gradient(135deg, #0f0f23, #1a1a2e, #16213e); 
             color: white; height: 100vh; overflow: hidden;
         }
         #devices {
-            position: fixed; top: 10px; left: 10px; 
-            background: rgba(0,0,0,0.9); padding: 15px; 
-            max-height: 80vh; overflow-y: auto; width: 280px; 
-            border-radius: 10px; backdrop-filter: blur(10px);
+            position: fixed; top: 15px; left: 15px; 
+            background: rgba(0,0,0,0.85); padding: 20px; 
+            max-height: 75vh; overflow-y: auto; width: 300px; 
+            border-radius: 15px; backdrop-filter: blur(20px); border: 1px solid #333;
         }
-        .device { padding: 12px; margin: 8px 0; background: #333; cursor: pointer; 
-            border-radius: 8px; transition: all 0.3s; }
-        .device:hover { background: #555; transform: translateX(5px); }
-        .active { background: #00ff88 !important; color: #000; }
-        .disconnected { opacity: 0.5; }
+        .device { padding: 15px; margin: 10px 0; background: #1e1e2e; cursor: pointer; 
+            border-radius: 12px; transition: all 0.3s; border-left: 4px solid #666; }
+        .device:hover { background: #2a2a3a; transform: translateX(8px); border-left-color: #00ff88; }
+        .active { background: linear-gradient(135deg, #00ff88, #00cc6a) !important; 
+                  color: #000; border-left-color: #00aa60 !important; }
+        .disconnected { opacity: 0.6; border-left-color: #ff4444; }
+        .device b { display: block; font-size: 14px; }
+        .device small { opacity: 0.8; }
 
         #phone-frame {
-            width: 400px; height: 800px; margin: 20px auto; 
-            background: #000; border: 25px solid #333; border-radius: 50px; 
+            width: 420px; height: 900px; margin: 25px auto; 
+            background: linear-gradient(145deg, #1a1a1a, #111); 
+            border: 30px solid #2a2a2a; border-radius: 60px; 
             position: relative; cursor: pointer; touch-action: none;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
         }
         #screen { 
-            width: 100%; height: 100%; background: #111; border-radius: 20px;
+            width: 100%; height: 100%; background: #000; border-radius: 30px;
             image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.8);
         }
-        #fps-counter { position: fixed; top: 10px; right: 150px; font-size: 12px; color: #00ff88; }
-        #status { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
-            padding: 10px; border-radius: 5px; font-size: 12px; }
+        #fps-counter { position: fixed; top: 15px; right: 160px; font-size: 13px; 
+                       color: #00ff88; font-weight: bold; background: rgba(0,0,0,0.7); 
+                       padding: 5px 10px; border-radius: 15px; }
+        #status { position: fixed; top: 15px; right: 15px; background: rgba(0,0,0,0.9); 
+                  padding: 15px; border-radius: 10px; font-size: 13px; border: 1px solid #444; }
         
         #control-panel {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.9); padding: 15px; border-radius: 15px;
-            backdrop-filter: blur(10px); text-align: center;
+            position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,20,40,0.95); padding: 20px; border-radius: 25px;
+            backdrop-filter: blur(25px); text-align: center; border: 1px solid #007bff;
         }
         button {
-            padding: 10px 20px; margin: 5px; background: linear-gradient(45deg, #007bff, #0056b3); 
-            color: white; border: none; border-radius: 20px; cursor: pointer; 
-            font-size: 14px; font-weight: bold; transition: all 0.3s;
+            padding: 12px 25px; margin: 6px; background: linear-gradient(45deg, #007bff, #0056b3); 
+            color: white; border: none; border-radius: 25px; cursor: pointer; 
+            font-size: 15px; font-weight: bold; transition: all 0.3s; min-width: 70px;
         }
-        button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,123,255,0.4); }
+        button:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,123,255,0.5); }
         button:active { transform: translateY(0); }
+        #type-btn { background: linear-gradient(45deg, #28a745, #20c997); }
+        #back-btn { background: linear-gradient(45deg, #dc3545, #c82333); }
+        #home-btn { background: linear-gradient(45deg, #ffc107, #e0a800); }
         
         #type-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); display: none; z-index: 1000;
+            background: rgba(0,0,0,0.85); display: none; z-index: 1000;
             justify-content: center; align-items: center;
         }
         #type-input-overlay {
-            width: 80%; padding: 20px; background: #333; border-radius: 15px;
-            text-align: center;
+            width: 90%; max-width: 500px; padding: 30px; background: linear-gradient(145deg, #1e1e2e, #2a2a3a); 
+            border-radius: 20px; text-align: center; border: 2px solid #007bff;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
         }
         #type-input-overlay input {
-            width: 100%; padding: 15px; margin: 10px 0; border: none; 
-            border-radius: 10px; background: #555; color: white; font-size: 18px;
+            width: 100%; padding: 18px; margin: 15px 0; border: none; 
+            border-radius: 15px; background: linear-gradient(145deg, #333, #444); 
+            color: white; font-size: 20px; text-align: center;
+        }
+        #type-input-overlay button {
+            width: 120px; margin: 8px;
         }
     </style>
 </head>
 <body>
     <div id="devices">
-        <h3>📱 Devices</h3>
-        <div id="device-list">Loading...</div>
+        <h3 style="margin-bottom: 15px; color: #00ff88;">📱 LIVE Devices</h3>
+        <div id="device-list">🔄 Connecting...</div>
     </div>
     
     <div id="status">
-        <div>Status: <span id="connectionStatus">Connecting...</span></div>
+        <div>Status: <span id="connectionStatus">🔄 Connecting...</span></div>
         <div>FPS: <span id="fps">0</span> | Device: <span id="selectedDevice">-</span></div>
+        <div id="resolution">-</div>
     </div>
     <div id="fps-counter">FPS: 0</div>
 
@@ -82,16 +98,18 @@
     </div>
 
     <div id="control-panel">
-        <button onclick="toggleTypeOverlay()">⌨️ Type</button>
-        <button onclick="sendBack()">🔙 Back</button>
-        <button onclick="sendHome()">🏠 Home</button>
+        <button id="type-btn" onclick="toggleTypeOverlay()">⌨️ Type</button>
+        <button id="back-btn" onclick="sendBack()">🔙 Back</button>
+        <button id="home-btn" onclick="sendHome()">🏠 Home</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
     </div>
 
-    <!-- ✅ NEW: Overlay typing - direct keyboard input -->
     <div id="type-overlay">
         <div id="type-input-overlay">
-            <input type="text" id="type-input" placeholder="Type here & press Enter..." maxlength="200">
+            <div style="font-size: 18px; margin-bottom: 20px; color: #00ff88;">
+                ⌨️ Type text & press Enter
+            </div>
+            <input type="text" id="type-input" placeholder="Type message here..." maxlength="300" autofocus>
             <br>
             <button onclick="sendTypedText()">✅ Send</button>
             <button onclick="toggleTypeOverlay()">❌ Cancel</button>
@@ -99,48 +117,54 @@
     </div>
 
     <script>
-        const socket = io({ transports: ['websocket'] }); // ✅ Force WebSocket only
+        const socket = io({ 
+            transports: ['websocket'],
+            upgrade: false,
+            rememberUpgrade: false
+        });
+        
         let currentDevice = null;
-        let deviceWidth = 1080, deviceHeight = 1920;
+        let deviceWidth = 1080, deviceHeight = 1920; // ✅ Dynamic update
         let lastFrameTime = 0, frameCount = 0;
         let startX = 0, startY = 0, dragging = false;
-        let frameBuffer = new OffscreenCanvas(400, 800); // ✅ Double buffering
 
         const canvas = document.getElementById('screen');
-        const ctx = canvas.getContext('2d', { alpha: false });
+        const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
         const phoneFrame = document.getElementById('phone-frame');
         const deviceList = document.getElementById('device-list');
         const connectionStatus = document.getElementById('connectionStatus');
         const selectedDevice = document.getElementById('selectedDevice');
-        const fpsCounter = document.getElementById('fps-counter');
         const fpsDisplay = document.getElementById('fps');
+        const fpsCounter = document.getElementById('fps-counter');
+        const resolutionDisplay = document.getElementById('resolution');
         const typeOverlay = document.getElementById('type-overlay');
         const typeInput = document.getElementById('type-input');
 
-        // ✅ Ultra smooth canvas setup
-        canvas.width = 400; canvas.height = 800;
+        // ✅ Perfect canvas setup
+        canvas.width = 420; 
+        canvas.height = 900;
         ctx.imageSmoothingEnabled = false;
+        ctx.imageSmoothingQuality = 'high';
 
         socket.on('connect', () => {
-            connectionStatus.textContent = '✅ Connected';
+            connectionStatus.textContent = '✅ LIVE';
             connectionStatus.style.color = '#00ff88';
+            console.log('✅ WebSocket Connected!');
         });
 
-        socket.on('devices-update', (devices) => {
-            updateDeviceList(devices);
-        });
-
+        // ✅ FIXED: Perfect screen update handler
         socket.on('screen-update', (data) => {
             if (data.deviceId !== currentDevice) return;
             
+            // ✅ Update device dimensions dynamically
+            deviceWidth = data.width;
+            deviceHeight = data.height;
+            resolutionDisplay.textContent = `${data.width}x${data.height}`;
+            
             const img = new Image();
             img.onload = () => {
-                // ✅ Double buffering for ultra smooth
-                const frameCtx = frameBuffer.getContext('2d');
-                frameCtx.imageSmoothingEnabled = false;
-                frameCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                
-                ctx.drawImage(frameBuffer, 0, 0);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
                 frameCount++;
                 const now = performance.now();
@@ -152,28 +176,38 @@
                     lastFrameTime = now;
                 }
             };
+            img.onerror = () => console.log('Image load failed');
             img.src = 'data:image/jpeg;base64,' + data.data;
         });
 
-        fetch('/devices').then(r => r.json()).then(updateDeviceList);
+        socket.on('devices-update', (devices) => {
+            updateDeviceList(devices);
+        });
 
         function updateDeviceList(devices) {
             deviceList.innerHTML = devices.length ? 
                 devices.map(([id, info]) => `
                     <div class="device ${!info.connected ? 'disconnected' : ''}" 
-                         onclick="selectDevice('${id}', this)">
-                        <b>${info.model || id.slice(0,8)}</b><br>
-                        <small>${info.brand} ${info.version || ''}</small>
-                        ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
+                         onclick="selectDevice('${id}', this, ${info.width || 1080}, ${info.height || 1920})">
+                        <b>${info.model?.slice(0,20) || id.slice(0,8)}</b>
+                        <small>${info.brand || 'Android'} ${info.version || '?'}</small>
+                        <div style="font-size: 11px; margin-top: 5px;">
+                            ${info.connected ? '🟢 LIVE' : '🔴 OFFLINE'}
+                            ${info.width ? `<span style="opacity:0.7;">${info.width}x${info.height}</span>` : ''}
+                        </div>
                     </div>
-                `).join('') : 'No devices';
+                `).join('') : '<div style="text-align:center;opacity:0.5;">No devices online</div>';
         }
 
-        function selectDevice(deviceId, el) {
+        function selectDevice(deviceId, el, width=1080, height=1920) {
             currentDevice = deviceId;
+            deviceWidth = width;
+            deviceHeight = height;
             selectedDevice.textContent = deviceId.slice(0,8);
+            resolutionDisplay.textContent = `${width}x${height}`;
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
+            console.log(`📱 Selected: ${deviceId} (${width}x${height})`);
         }
 
         function getScaledCoords(clientX, clientY) {
@@ -186,7 +220,7 @@
             };
         }
 
-        // ✅ Touch/Mouse Controls - ULTRA RESPONSIVE
+        // ✅ Ultra-responsive touch/mouse
         ['mousedown', 'touchstart'].forEach(event => {
             phoneFrame.addEventListener(event, e => {
                 e.preventDefault();
@@ -196,7 +230,7 @@
                     e.touches?.[0]?.clientY || e.clientY
                 );
                 startX = coords.x; startY = coords.y;
-            });
+            }, { passive: false });
         });
 
         ['mousemove', 'touchmove'].forEach(event => {
@@ -208,7 +242,7 @@
                     e.touches?.[0]?.clientY || e.clientY
                 );
                 sendSwipe(startX, startY, coords.x, coords.y);
-            });
+            }, { passive: false });
         });
 
         ['mouseup', 'touchend'].forEach(event => {
@@ -221,11 +255,11 @@
                     sendTap(coords.x, coords.y);
                 }
                 dragging = false;
-            });
+            }, { passive: false });
         });
 
         function sendControl(action, x=0, y=0, startX=0, startY=0, endX=0, endY=0, text='') {
-            if (!currentDevice) return;
+            if (!currentDevice) return alert('Select device first!');
             socket.emit('control', { 
                 deviceId: currentDevice, action, x, y, startX, startY, endX, endY, text 
             });
@@ -239,18 +273,26 @@
         
         function toggleTypeOverlay() {
             typeOverlay.style.display = typeOverlay.style.display === 'flex' ? 'none' : 'flex';
-            if (typeOverlay.style.display === 'flex') typeInput.focus();
+            if (typeOverlay.style.display === 'flex') {
+                typeInput.focus();
+                typeInput.select();
+            }
         }
 
         function sendTypedText() {
             const text = typeInput.value.trim();
-            if (text) sendText(text);
-            typeInput.value = '';
+            if (text && currentDevice) {
+                sendText(text);
+                typeInput.value = '';
+            }
             toggleTypeOverlay();
         }
 
         typeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendTypedText();
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendTypedText();
+            }
         });
 
         function toggleFullScreen() {
@@ -263,9 +305,18 @@
 
         // ✅ Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') sendBack();
-            if (e.key === 't' && e.ctrlKey) toggleTypeOverlay();
+            if (e.key === 'Escape') {
+                sendBack();
+                toggleTypeOverlay();
+            }
+            if (e.ctrlKey && e.key === 't') {
+                e.preventDefault();
+                toggleTypeOverlay();
+            }
         });
+
+        // ✅ Initial devices fetch
+        fetch('/devices').then(r => r.json()).then(updateDeviceList);
     </script>
 </body>
 </html>
